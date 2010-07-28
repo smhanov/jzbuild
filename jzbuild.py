@@ -12,40 +12,10 @@ import base64
 import zlib
 """
 Todo:
-* rename files to input
-* rename vpath to include
-* use compilerOptions if present
-* inherit properties from base
-* parse items:
-    item := { string ':' item }
-    item := [ string* ]
-    item := string
-
-* throw proper exception instead of string
-* token object with getText method
-* error reporting with line number
-* states for quoted strings
-* unescape strings
-* only check for compiler if compiler is needed.
-* if no makefile, then lint every file in the folder
-* --help -h or -? or /? displays man page
-- write a man page
-* if --out specified, ignore makefile
-* if --out specified or no makefile, other command line options are names of
-javascript files.
-* if --out specified or no makefile and no files specified, use *.js
-* allow -I option to add to include path
-* if -f specified, use the specific name for a makefile
-* prepend
-- test on linux:
-    - no rhino?
-- Write a map of the jzbuild.py file and how to change things
+   - Document makefile format
 """
 
-# Make these variables global, and set them later.
-JSLINT_RHINO = ""
-JSLINT_WSH = ""
-MAN_PAGE = ""
+MAKEFILE_NAME = "makefile.jz"
 
 NEVER_CHECK_THESE_FILES = """
 jquery.min.js
@@ -54,15 +24,26 @@ prototype.js
 """.split("\n")
 
 COMPILERS = {
+    # Name of the compiler, as specified in the makefile and the --compiler
+    # option.
     "closure": {
+        # URL at which to download a zipfile of the compiler
         "download":
             "http://closure-compiler.googlecode.com/files/compiler-latest.zip",
+
+        # full path in the zip file of the compiler.
         "filename":
             "compiler.jar",
+
+        # Command line option that must precede each input filename
         "inputOption":
             "--js",
+
+        # Command line option to specify the output file
         "outputOption":
             "--js_output_file",
+
+        # Default options to use if none are specified
         "defaultOptions": [
             "--compilation_level", "SIMPLE_OPTIMIZATIONS",
             "--warning_level", "VERBOSE" ]
@@ -82,7 +63,142 @@ COMPILERS = {
 VALID_COMPILERS = COMPILERS.keys();
 VALID_COMPILERS.append("cat")
 
-MAKEFILE_NAME = "makefile.jz"
+MAN_PAGE = """
+NAME
+    
+    jzbuild - The easy Javascript build system
+
+SYNOPSIS
+    
+    jzbuild [files or projects]
+
+DESCRIPTION
+
+    Runs jslint and joins together javascript input files, optionally using the
+    Google closure compiler or YUI compressor to reduce file size and find more
+    errors.
+
+    Jzbuild looks for a file named "makefile.jz" in the current folder. If
+    found, it reads the list of projects and options from that file. Otherwise,
+    it uses the options given from the command line, or defaults.
+
+    [files]
+
+        If no filenames are given and no makefile is present, Jzbuild will
+        run jslint on all files matching the pattern "*.js" in the current
+        folder.
+
+    [projects]
+
+        If a makefile is present, the names given on the command line refer to
+        projects in the makefile.
+
+    --out <output>
+   
+        Specifies output file name. If an output file is given, the makefile is
+        ignored. This option is called "output" in the makefile.
+
+    --prepend <filename>
+        
+        Specifies a file for prepending. The include path will be searched for
+        the file, and it will be prepended to the output. This option may be
+        specified multiple times. This option is ignored if a makefile is
+        present. 
+
+    -I<path>
+
+        Specifies a folder to be searched for included files. This option may
+        be specified multiple times. The current folder is always in the
+        include path. This option is ignored if a makefile is present.
+
+    --compiler
+
+        Specifies the compiler to use. This option is ignored if a makefile is
+        present. Valid options are VALID_COMPILERS. If you do not have the
+        given compiler, it will be downloaded.
+
+    clean
+        
+        If the word "clean" is given as an option, the output file is erased
+        instead of created, and JSLINT is not run.
+
+MAKEFILE FORMAT
+
+    When jzbuild starts, it runs in one of two modes --
+        
+        1. If the '--out' option is not specified, it searches the current
+           folder for a file named "MAKEFILE_JZ". If it is found, the settings
+           are processed as described below.
+
+        2. If the "--out" option is given, or MAKEFILE_JZ is not found, then it
+           builds a list of input files from '*.js', excluding any common
+           javascript libraries such as jquery. 
+
+    The makefile is formatted in Lazy JSON. This is exactly like JSON, except
+    that quotes and commas are optional. The Makefile consists of a single
+    object whos keys are project names. For example:
+
+        {
+            release: {
+                input: [ foo.js bar.js ]
+                include: [ ../shared ]
+                output: foo-compressed.js
+                compiler: closure
+            }
+
+            yui {
+                base: release
+                output: foo-yui-compressed.js          
+                compiler: yui
+            }
+        }
+
+    The above defines two projects named "release", and "yui". The release
+    project consists of foo.js and bar.js, as well as any files that they
+    include. The include path searched is the current folder as well as
+    "../shared".
+
+    The yui project specifies "base: release". That means that it inherits any
+    unset properties from the project named "release".
+
+    Here is a list of valid options for a project:
+
+        input
+            A string or array of files that will be compiled together, along
+            with any files they include.
+
+        output    
+            The output filename. If none is given, the compiler will not run.
+            Only JSLINT checking will be performed.
+
+        include
+            A single string, or array of strings that specify the paths to
+            search when looking for input files, or the files that they
+            include. The current folder is always part of the include path.
+
+        compiler
+            The name of the compiler to use. Valid compilers are
+            VALID_COMPILERS. The default is "cat"
+
+        compilerOptions
+            Compiler options to use. Jzbuild contains suitable defaults for
+            each compiler. But they can be overridden. 
+
+        base
+            Specifies another project from which to inherit the above settings.
+
+        prepend
+            A single string, or array of strings specifying the names of files
+            which are prepended to the output. No error checking is performed
+            on these files, and they are not compiled.
+
+""".replace("VALID_COMPILERS",
+    ",".join(VALID_COMPILERS)).replace("MAKEFILE_JZ", MAKEFILE_NAME)
+
+# Make these variables global, and set them later.
+JSLINT_RHINO = ""
+JSLINT_WSH = ""
+
 
 class LazyJsonParser:
     """This class parses Lazy JSON. Currently it does not take advantage of
@@ -244,6 +360,8 @@ class LazyJsonParser:
                 return LazyJsonParser.Token( self.TOKEN_ERROR, self.pos, 1 )
 
     def unescape( self, str ):
+        """Unescape JSON string"""
+
         ret = ""
         i = 0
         while i < len( str ):
@@ -325,20 +443,33 @@ class LazyJsonParser:
         raise Exception( "Error on line %d:%d: %s" % (line, pos, message) )    
 
 def ParseLazyJson( text ):
+    """Wrapper for LazyJsonParser class that transforms Lazy JSON or JSON text
+       into a python object."""
     return LazyJsonParser(text).parse();
 
-#print ParseLazyJson("[ steve, //This is some text\nlouie\n [alpha beta] ]")
-#print ParseLazyJson(""" [ "h\\nello" hello,'hello']""")
-#sys.exit(0)
-
+# Global variable to say whether we are on windows.
 IsWindows = platform.system() == "Windows"
 
 def ReplaceSlashes(list):
-    if os.path.sep == '/': return
+    """Transform unix style slashes into the path separator of the system that
+       we are running on"""
+
+    if os.path.sep == '/': return list
     newList = []
     for item in list:
         newList.append( item.replace( "/", os.path.sep ) )
     return newList
+
+def GetStorageFolder():
+    """Returns the path to a location where we can store downloads"""
+
+    # Seems to work on windows 7 too   
+    path = os.path.join(os.path.expanduser("~"), ".jzbuild")
+    if not os.path.isdir(path):
+        print "Creating %s" % path
+        os.mkdir(path)
+    return path 
+            
 
 class DependencyGraph:
     """ Represents a dependency graph. A dependency graph contains items that
@@ -405,9 +536,13 @@ class DependencyGraph:
 
 def GetCompleteFileList( fileListIn, vpath ):
     """Returns a list of files in topological order, with full path
-    information.
+    information. This function reads the files and augments the list with
+    included files as well.
 
-    fileListIn specifies the original 
+    fileListIn specifies a list of files
+
+    vpath is a list of folders in which to search for the files in the file
+    list as well as any included files.
     """
 
     graph = DependencyGraph()
@@ -472,19 +607,20 @@ def GetCompleteFileList( fileListIn, vpath ):
     # spit out dependencies...
     return graph.walk()
 
-def RunJsLint(files, targetTime):
+def RunJsLint(files, targetTime, options):
     """Run Jslint on each file in the list that has a modification time greater
     than the targetTime. Returns the number of files processed.
 
-    If jslint is not available in the same folder as this python script file,
-    then create it.
+    If jslint is not available in the storage folder, then create it.
     """
+
+    storagePath = GetStorageFolder()
 
     numProcessed = 0
     if IsWindows:
         # check if jslint-wsh exists in the same location as this script. if
         # not, create one.
-        jslint = os.path.join( sys.path[0], "jslint-wsh.js" );
+        jslint = os.path.join( storagePath, "jslint-wsh.js" );
         if not os.path.exists( jslint ):
             print "%s not found. Creating." % jslint
             f = file(jslint, "w")
@@ -498,27 +634,40 @@ def RunJsLint(files, targetTime):
                 numProcessed += 1
     else:
 
-        cmd = ["rhino", "../tools/jslint-rhino.js"]
+        # Create the jslint-rhino file if it does not exist.
+        jslint = os.path.join( storagePath, "jslint-rhino.js" );
+        if not os.path.exists( jslint ):
+            print "%s not found. Creating." % jslint
+            f = file(jslint, "w")
+            f.write(zlib.decompress(base64.b64decode(JSLINT_RHINO)))
+            f.close()
 
-        for f in CheckedFiles:
+        # run the JSlint-rhino file on any files which are newer than the
+        # target.        
+        cmd = []
+        cmd.extend(options.rhinoCmd)
+        cmd.append( jslint )
+
+        for f in files:
             if os.path.getmtime(f) > targetTime:
                 cmd.append(f);
                 numProcessed += 1
 
-        if len(cmd) > 2:            
+        if numProcessed > 0:
             subprocess.call(cmd)
 
     return numProcessed
 
-def RunCompiler(type, files, output, compilerOptions, prepend):            
-    compiler = COMPILERS[type]
-    compilerFileName = os.path.join( sys.path[0], 
-        os.path.basename(compiler["filename"] ) )
-    
-    if not os.path.exists( compilerFileName ):
-        print "Compiler not found! Downloading from %s" % compiler["download"]
+def DownloadProgram(url, fileInZip, outputPath):
+    """Given a url to a zip file, a path to a file within that zip file, and an
+       output file, it downloads the zip and extracts it to the given path.
+       
+       If the target file already exists it does nothing."""
 
-        url = urllib2.urlopen( compiler["download"] )
+    if not os.path.exists( outputPath ):
+        print "%s not found! Downloading from %s" % (outputPath, url)
+
+        url = urllib2.urlopen( url )
         dataFile = ""    
         while 1:
             data = url.read( 1024 )
@@ -527,7 +676,29 @@ def RunCompiler(type, files, output, compilerOptions, prepend):
             print "Read %d bytes\r" % len(dataFile),
 
         zip = zipfile.ZipFile( cStringIO.StringIO( dataFile ), "r" )    
-        file(compilerFileName, "wb").write(zip.read(compiler["filename"]))
+        file(outputPath, "wb").write(zip.read(fileInZip))
+
+    return True    
+
+def RunCompiler(type, files, output, compilerOptions, prepend):            
+    """Downloads and runs the compiler of the given type.
+
+       type is a key to the compiler information in the global map COMPILERS
+       
+       files is the list of files to run the compiler on
+
+       compilerOptions is the list of options to the compiler, specified before
+       the input files
+
+       prepend is the list of files to prepend to the output, without
+       processing them by the compiler
+       """
+    compiler = COMPILERS[type]
+    compilerFileName = os.path.join( GetStorageFolder(), 
+        os.path.basename(compiler["filename"] ) )
+    
+    DownloadProgram( compiler["download"], compiler["filename"],
+            compilerFileName )
 
     print "Running %s compiler." % type
 
@@ -538,8 +709,6 @@ def RunCompiler(type, files, output, compilerOptions, prepend):
         if compiler["inputOption"] != "":
             cmdLine.append(compiler["inputOption"])
         cmdLine.append(f)
-
-    #cmdLine.extend([compiler["outputOption"], output])
 
     outputFile = file(output, "w")
     for f in prepend:
@@ -575,7 +744,6 @@ def RemoveComments( str ):
         else:
             lines.append( line )
 
-    #print "\n".join(lines)
     return "\n".join(lines)
 
 def GetKey( projects, name, key, makeArray=False ):
@@ -610,6 +778,11 @@ def GetKey( projects, name, key, makeArray=False ):
         else:    
             return None
 
+def InstallRhino(outputPath):
+    return DownloadProgram(
+            "ftp://ftp.mozilla.org/pub/mozilla.org/js/rhino1_7R2.zip",
+            "rhino1_7R2/js.jar", outputPath)
+
 def CheckEnvironment(projects, names):
     """Determine if the program will run, by checking the system for all
     required files.
@@ -640,23 +813,11 @@ def CheckEnvironment(projects, names):
                 print "Cannot find Java. Please install it from www.java.com."
                 os.system("start http://www.java.com")
                 okay = False
-    else:
-        # We need rhino.
-        path = os.environ["PATH"].split(":")
-        if needRhino:
-            for folder in path:
-                rhino = os.path.join(folder, "rhino")
-                if os.path.isfile( rhino ):
-                    haveRhino = True
-                    break
-
-            if not haveRhino:
-                print "Cannot find Rhino. Please install it (Try sudo apt-get install rhino )"
-                okay = False
     return okay
 
 def CreateProjects(options):
-    """No Makefile.jz. Automatically create one that just de-lints files."""
+    """No Makefile.jz exists Automatically create one based on the files in the
+       current working folder and the given options."""
 
     input = options.input
     if len(input) == 0:
@@ -692,6 +853,8 @@ def CreateProjects(options):
     return projects
 
 class Options:
+    """ Parse arguments to the script file """
+
     def __init__(self):
         self.names = []
         self.input = []
@@ -758,6 +921,22 @@ class Options:
             self.input = self.names
             self.names = []
 
+        # We need rhino.
+        if not IsWindows:    
+            haveRhino = False
+            for folder in os.environ["PATH"].split(":"):
+                rhino = os.path.join(folder, "rhino")
+                if os.path.isfile( rhino ):
+                    haveRhino = True
+                    self.rhinoCmd = [rhino]
+                    break
+
+            if not haveRhino:
+                rhino = os.path.join(GetStorageFolder(), "rhino.jar")
+
+            if not haveRhino:
+                InstallRhino(rhino)
+                self.rhinoCmd = ["java", "-jar", rhino]    
 
 def main():
     options = Options()
@@ -859,7 +1038,7 @@ def main():
         except:
             pass
 
-        RunJsLint( files, targetTime )
+        RunJsLint( files, targetTime, options )
 
         if output != None:
             if compiler != "cat":
@@ -871,60 +1050,6 @@ def main():
                 completeList.extend( files )
                 JoinFiles( files, output)
 
-MAN_PAGE = """
-NAME
-    
-    jzbuild - The easy Javascript build system
-
-SYNOPSIS
-    
-    jzbuild [files or projects]
-
-DESCRIPTION
-
-    Runs jslint and joins together javascript input files, optionally using the
-    Google closure compiler or YUI compressor to reduce file size and find more
-    errors.
-
-    Jzbuild looks for a file named "makefile.jz" in the current folder. If
-    found, it reads the list of projects and options from that file. Otherwise,
-    it uses the options given from the command line, or defaults.
-
-    [files]
-
-        If no filenames are given and no makefile is present, Jzbuild will
-        run jslint on all files matching the pattern "*.js" in the current
-        folder.
-
-    [projects]
-
-        If a makefile is present, the names given on the command line refer to
-        projects in the makefile.
-
-    --out <output>
-   
-        Specifies output file name. If an output file is given, the makefile is
-        ignored. This option is called "output" in the makefile.
-
-    --prepend <filename>
-        
-        Specifies a file for prepending. The include path will be searched for
-        the file, and it will be prepended to the output. This option may be
-        specified multiple times. This option is ignored if a makefile is
-        present. 
-
-    -I<path>
-
-        Specifies a folder to be searched for included files. This option may
-        be specified multiple times. The current folder is always in the
-        include path. This option is ignored if a makefile is present.
-
-    --compiler
-
-        Specifies the compiler to use. This option is ignored if a makefile is
-        present. Valid options are VALID_COMPILERS. If you do not have the
-        given compiler, it will be downloaded.
-""".replace("VALID_COMPILERS", ",".join(VALID_COMPILERS))
 
 # Here is jslint in case they don't have it.
 JSLINT_RHINO = """
