@@ -198,7 +198,7 @@ MAKEFILE FORMAT
 # Make these variables global, and set them later.
 JSLINT_RHINO = ""
 JSLINT_WSH = ""
-
+CLOSURE_EXTERNS = ""
 
 class LazyJsonParser:
     """This class parses Lazy JSON. Currently it does not take advantage of
@@ -630,7 +630,7 @@ def RunJsLint(files, targetTime, options):
         for f in files:
             if os.path.getmtime(f) > targetTime:
                 print f + "..."
-                os.system("cscript /Nologo " + jslint + " <%s" % f) 
+                os.system("cscript /Nologo \"" + jslint + "\" <\"%s\"" % f) 
                 numProcessed += 1
     else:
 
@@ -704,6 +704,15 @@ def RunCompiler(type, files, output, compilerOptions, prepend):
 
     cmdLine = [ "java", "-jar", compilerFileName ]
     cmdLine.extend( compilerOptions )
+
+    if type == "closure":
+        externs = os.path.join(GetStorageFolder(), "externs.js")
+        if not os.path.exists(externs):
+            # decompress externs file
+            f = file(externs, "w")
+            f.write(zlib.decompress(base64.b64decode(CLOSURE_EXTERNS)))
+            f.close()
+        cmdLine.extend( ["--externs", externs ] )
 
     for f in files:
         if compiler["inputOption"] != "":
@@ -2068,6 +2077,48 @@ K7NH4/4QhwOUCKlJFbBosCqoGnj2XwwiCyey2hSssgVMtPD2CKlckm3mGkpEIREGZqWekdLEd5rSQin
 ZmoowfBs8Ojw/7h7/pHn5vw/aok+UZK91ZkUKxodv/GIacGb+r5q3zwA2jYL7Ks2wtvVjAhFjDiZHW7
 67HolESOforXBooKQGgY/A2DzL6GeQOUkuKBa7NwJ23rttCNec1O1Jrd21wxrNFShsDbqejkZ/fg59P
 qaff0Dfxf7Z++2e897UHGrw7C3V8d7fZsjf97ndbdI8Q2Iub/ALzE3cM=
+"""
+
+CLOSURE_EXTERNS = """
+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
+wDQMr5lA==
 """
 
 if __name__ == '__main__': 
