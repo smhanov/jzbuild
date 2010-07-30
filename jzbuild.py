@@ -534,30 +534,95 @@ class DependencyGraph:
             self.parents = []
             self.children = []
 
-def GetCompleteFileList( fileListIn, vpath ):
-    """Returns a list of files in topological order, with full path
-    information. This function reads the files and augments the list with
-    included files as well.
+class Analysis:
+    """
+    Analyses the javascript files and stores the result. The analysis includes
+    a topological sort of included files as well as a list of exports.
 
     fileListIn specifies a list of files
 
-    vpath is a list of folders in which to search for the files in the file
-    list as well as any included files.
+    vpath is a list of folders in which to search for the files in the file list
+    as well as any included files.
     """
+    def __init__(self, fileListIn, vpath):
+        graph = DependencyGraph()
 
-    graph = DependencyGraph()
+        # Set of fully qualified paths that we have already processed.
+        filesProcessed = {}
 
-    # Set of fully qualified paths that we have already processed.
-    filesProcessed = {}
+        # List of files awaiting processing
+        filesToProcess = []
 
-    # List of files awaiting processing
-    filesToProcess = []
+        self.exports = []
 
-    includeRe = re.compile(r"""\/\/#include\s+[<"]([^>"]+)[>"]""")
+        includeRe = re.compile(r"""\/\/#include\s+[<"]([^>"]+)[>"]""")
+        exportRe = re.compile(r"""\/\/\@export ([A-Za-z_\$][A-Za-z_0-9\.\$]*)""")
 
-    def findFile( file ):
+        self.vpath = vpath
+
+        def processFile( path ):
+            """Given the full path to a file, open it and look for includes. For
+            each include found, add it to the file list and update the dependency
+            graph with the dependency.
+            """
+
+            contents = open( path, "r" ).readlines()
+            graph.addNode( path )
+            filesProcessed[path] = 1;
+
+            for line in contents:
+
+                m = exportRe.search( line )
+                if m:
+                    self.exports.append( m.group(1) )
+
+                m = includeRe.match( line )
+                if not m: continue
+
+                includedPath = findFile( m.group(1) )
+
+                if includedPath:
+                    if includedPath not in filesProcessed:
+                        filesToProcess.append( includedPath )
+                    graph.addDependency( path, includedPath )
+                else:
+                    print 'Error: Could not find file "%s" included from "%s"' % \
+                        (m.group(1), path )
+
+        # Augment each file passed in with full path information.
+        for name in fileListIn:
+            path = self.__findFile( name )
+            if path:
+                filesToProcess.append( path )
+            else:
+                print "File not found: " + name
+
+        # while the file list is not empty, remove and process a file.
+        while len( filesToProcess ):
+            processFile( filesToProcess.pop() )
+
+        # spit out dependencies...
+        self.fileList = graph.walk()
+
+    def prependFiles( self, fileNames ):
+        """Search for each file in the vpath and prepend its path to the
+           filelist returned by getFileList()
+        """
+
+        files = []
+        for name in fileNames:
+            path = self.__findFile( name )
+            if path != none:
+                files.append( path )
+            else:
+                print "File not found: %s" % name
+
+        files.extend( self.fileList )
+        self.fileList = files
+
+    def __findFile( self, file ):
         # for each vpath entry,
-        for path in vpath:
+        for path in self.vpath:
             # join it with the filename
             fullname = os.path.join(path, file)
 
@@ -567,45 +632,33 @@ def GetCompleteFileList( fileListIn, vpath ):
         else:
             return None
 
-    def processFile( path ):
-        """Given the full path to a file, open it and look for includes. For
-        each include found, add it to the file list and update the dependency
-        graph with the dependency.
-        """
+    def getFileList(self):
+        return self.fileList
 
-        contents = open( path, "r" ).readlines()
-        graph.addNode( path )
-        filesProcessed[path] = 1;
+    def getExports(self):
+        # keep track of exports already written.
+        written = {}
+        str = ""
 
-        for line in contents:
+        # for each export,
+        for export in self.exports:
 
-            m = includeRe.match( line )
-            if not m: continue
+            if export in written: continue
+            written[export] = 1
+        
+            # split into . components.
+            names = export.split(".")
 
-            includedPath = findFile( m.group(1) )
-
-            if includedPath:
-                if includedPath not in filesProcessed:
-                    filesToProcess.append( includedPath )
-                graph.addDependency( path, includedPath )
+            if len(names) == 1:
+                # one component. use window["name"] = name;
+                str += 'window["%s"] = %s;\n' % (names[0], export )
             else:
-                print 'Error: Could not find file "%s" included from "%s"' % \
-                    (m.group(1), path )
+                # more that one component. Only the last is exported.
+                str += (".".join(names[:-1]) + 
+                        '["%s"] = %s;\n' % (names[-1], export ) )
 
-    # Augment each file passed in with full path information.
-    for name in fileListIn:
-        path = findFile( name )
-        if path:
-            filesToProcess.append( path )
-        else:
-            print "File not found: " + name
+        return str        
 
-    # while the file list is not empty, remove and process a file.
-    while len( filesToProcess ):
-        processFile( filesToProcess.pop() )
-
-    # spit out dependencies...
-    return graph.walk()
 
 def RunJsLint(files, targetTime, options):
     """Run Jslint on each file in the list that has a modification time greater
@@ -680,7 +733,7 @@ def DownloadProgram(url, fileInZip, outputPath):
 
     return True    
 
-def RunCompiler(type, files, output, compilerOptions, prepend):            
+def RunCompiler(type, files, output, compilerOptions, prepend, exports):
     """Downloads and runs the compiler of the given type.
 
        type is a key to the compiler information in the global map COMPILERS
@@ -692,6 +745,9 @@ def RunCompiler(type, files, output, compilerOptions, prepend):
 
        prepend is the list of files to prepend to the output, without
        processing them by the compiler
+
+       exports is extra code added to the end as input to the compiler and is
+       intended to export names to the closure compiler.
        """
     compiler = COMPILERS[type]
     compilerFileName = os.path.join( GetStorageFolder(), 
@@ -739,21 +795,6 @@ def JoinFiles( files, outputFile ):
     output = file(outputFile, "w")
     for inputName in files:
         output.write(file(inputName, "r").read())
-
-def RemoveComments( str ):
-    """Removes comments from the given string and returns the result. A comment
-    is everything between two slashes and the end of a line. Comments can not
-    include quotes.
-    """
-    lines = []
-    for line in str.split("\n"):
-        pos = line.find("//");
-        if pos >= 0:
-            lines.append( line[:pos] )
-        else:
-            lines.append( line )
-
-    return "\n".join(lines)
 
 def GetKey( projects, name, key, makeArray=False ):
     """Returns the key of the project, following any bases"""
@@ -960,7 +1001,7 @@ def main():
             print "Could not find %s. Running jslint on input files." % options.makefile 
         projects = CreateProjects(options)
     else:    
-        projects = ParseLazyJson(RemoveComments(file(options.makefile, "r").read()))
+        projects = ParseLazyJson(file(options.makefile, "r").read())
 
     if len(options.names) == 0:
         if len(projects) == 1:
@@ -1035,10 +1076,15 @@ def main():
         include = ReplaceSlashes(include)
 
         # Process included files to obtain a complete list of files.
-        files = GetCompleteFileList( input, include )
+        analysis = Analysis(input, include)
 
         # Also process prepended files
-        prependedFiles = GetCompleteFileList( prepend, include )
+        prependedFiles = Analysis( prepend, include ).getFileList()
+
+        if compiler == 'closure':
+            exports = analysis.getExports()
+        else:
+            exports = ""
 
         # Get the file time of the output file, if it exists.
         targetTime = 0
@@ -1047,17 +1093,18 @@ def main():
         except:
             pass
 
-        RunJsLint( files, targetTime, options )
+        RunJsLint( analysis.getFileList(), targetTime, options )
 
         if output != None:
             if compiler != "cat":
-                RunCompiler( compiler, files, output, compilerOptions, prepend)
+                RunCompiler( compiler, analysis.getFileList(), output, 
+                        compilerOptions, prepend, exports)
             else:
                 print "Creating %s" % output
                 completeList = []
                 completeList.extend( prepend )
-                completeList.extend( files )
-                JoinFiles( files, output)
+                completeList.extend( analysis.getFileList() )
+                JoinFiles( analysis.getFileList(), output)
 
 
 # Here is jslint in case they don't have it.
