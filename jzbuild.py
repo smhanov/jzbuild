@@ -12,7 +12,9 @@ import base64
 import zlib
 """
 Todo:
-   - Document makefile format
+   * Document makefile format
+   * detect circular dependencies
+   - @export
 """
 
 MAKEFILE_NAME = "makefile.jz"
@@ -49,6 +51,7 @@ COMPILERS = {
             "--warning_level", "VERBOSE" ]
 
     },
+
     "yui": {
         "download":
             "http://yuilibrary.com/downloads/yuicompressor/yuicompressor-2.4.2.zip",
@@ -485,11 +488,24 @@ class DependencyGraph:
         parent. It is not necessary to call the addNode() method to add the nodes
         first.
         """
-
         child = self.__getNodeFor( child )
         parent = self.__getNodeFor( parent )
-        parent.children.append( child )
-        child.parents.append( parent )
+
+        if not self.__find( child, parent ):
+            parent.children.append( child )
+            child.parents.append( parent )
+            return True
+        else:
+            return False
+
+    def __find( self, parent, node ):
+        """Searches the parent for the given node, and if found, returns True
+        """
+        if parent == node: return True
+        for child in parent.children:
+            if self.__find( child, node ):
+                return True
+        return False        
 
     def addNode( self, data ):
         """Adds a single node to the graph with no dependencies. Dependencies may
@@ -587,7 +603,8 @@ def GetCompleteFileList( fileListIn, vpath ):
             if includedPath:
                 if includedPath not in filesProcessed:
                     filesToProcess.append( includedPath )
-                graph.addDependency( path, includedPath )
+                if not graph.addDependency( path, includedPath ):
+                    print "Error: %s includes %s which results in a circular dependency." % (path, includedPath)
             else:
                 print 'Error: Could not find file "%s" included from "%s"' % \
                     (m.group(1), path )
@@ -2080,45 +2097,46 @@ qaff0Dfxf7Z++2e897UHGrw7C3V8d7fZsjf97ndbdI8Q2Iub/ALzE3cM=
 """
 
 CLOSURE_EXTERNS = """
-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
-wDQMr5lA==
+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
+4R+0jz4uOOcm3eG+lE7DCrKWf4doEH8P5PkRLg=
 """
 
 if __name__ == '__main__': 
