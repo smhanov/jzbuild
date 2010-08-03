@@ -10,6 +10,7 @@ import zipfile
 import glob
 import base64
 import zlib
+import tempfile
 """
 Todo:
    - Document makefile format
@@ -579,7 +580,7 @@ class Analysis:
                 m = includeRe.match( line )
                 if not m: continue
 
-                includedPath = findFile( m.group(1) )
+                includedPath = self.__findFile( m.group(1) )
 
                 if includedPath:
                     if includedPath not in filesProcessed:
@@ -775,6 +776,13 @@ def RunCompiler(type, files, output, compilerOptions, prepend, exports):
             cmdLine.append(compiler["inputOption"])
         cmdLine.append(f)
 
+    if type == 'closure':
+        exportFile = tempfile.NamedTemporaryFile(suffix=".js", delete=False)
+        exportFileName = exportFile.name
+        exportFile.write(exports)
+        exportFile.close()
+        cmdLine.extend([ "--js", exportFileName])
+
     outputFile = file(output, "w")
     for f in prepend:
         print "Prepending %s" % f
@@ -787,6 +795,9 @@ def RunCompiler(type, files, output, compilerOptions, prepend, exports):
     print
 
     subprocess.call(cmdLine, stdout=outputFile)
+
+    if type == 'closure':
+        os.unlink(exportFileName)
 
 def JoinFiles( files, outputFile ):    
     """Concatenates the contents of the given files and writes the output to
