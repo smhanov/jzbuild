@@ -873,6 +873,7 @@ def JoinFiles( files, outputFile ):
     """Concatenates the contents of the given files and writes the output to
     the outputFile.
     """
+    sys.stderr.write("Joining " + " ".join(files) + "\n" )
     output = file(outputFile, "w")
     for inputName in files:
         output.write(file(inputName, "r").read())
@@ -1185,8 +1186,7 @@ def main():
                 completeList = []
                 completeList.extend( prepend )
                 completeList.extend( analysis.getFileList() )
-                JoinFiles( analysis.getFileList(), output)
-
+                JoinFiles( completeList, output)
 
 # Here is jslint in case they don't have it.
 JSLINT_RHINO = """
