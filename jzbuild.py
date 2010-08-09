@@ -747,7 +747,7 @@ def RunJsLint(files, targetTime, options):
         jslint = os.path.join( storagePath, "jslint-wsh.js" );
         if not os.path.exists( jslint ):
             print "%s not found. Creating." % jslint
-            f = file(jslint, "w")
+            f = file(jslint, "wb")
             f.write(zlib.decompress(base64.b64decode(JSLINT_WSH)))
             f.close()
 
@@ -762,7 +762,7 @@ def RunJsLint(files, targetTime, options):
         jslint = os.path.join( storagePath, "jslint-rhino.js" );
         if not os.path.exists( jslint ):
             print "%s not found. Creating." % jslint
-            f = file(jslint, "w")
+            f = file(jslint, "wb")
             f.write(zlib.decompress(base64.b64decode(JSLINT_RHINO)))
             f.close()
 
@@ -836,14 +836,14 @@ def RunCompiler(type, files, output, compilerOptions, prepend, exports):
         externs = os.path.join(GetStorageFolder(), "externs.js")
         if not os.path.exists(externs):
             # decompress externs file
-            f = file(externs, "w")
+            f = file(externs, "wb")
             f.write(zlib.decompress(base64.b64decode(CLOSURE_EXTERNS)))
             f.close()
         cmdLine.extend( ["--externs", externs ] )
 
     for f in files:
         if compiler["inputOption"] != "":
-            cmdLine.append(compiler["inputOption"])
+            cmdLine.append( compiler["inputOption"] )
         cmdLine.append(f)
 
     if type == 'closure':
@@ -856,7 +856,7 @@ def RunCompiler(type, files, output, compilerOptions, prepend, exports):
     outputFile = file(output, "w")
     for f in prepend:
         print "Prepending %s" % f
-        outputFile.write(file(f, "r").read())
+        outputFile.write(file(f, "rb").read())
 
     outputFile.flush()
 
@@ -873,9 +873,9 @@ def JoinFiles( files, outputFile ):
     """Concatenates the contents of the given files and writes the output to
     the outputFile.
     """
-    output = file(outputFile, "w")
+    output = file(outputFile, "wb")
     for inputName in files:
-        output.write(file(inputName, "r").read())
+        output.write(file(inputName, "rb").read())
 
 def GetKey( projects, name, key, makeArray=False ):
     """Returns the key of the project, following any bases"""
@@ -1047,7 +1047,7 @@ class Options:
 
             i += 1
 
-        if self.output != None:
+        if self.output != None or not os.path.exists( MAKEFILE_NAME ):
             # No makefile mode. All the project names were actually filenames.
             self.input = self.names
             self.names = []
@@ -1082,7 +1082,7 @@ def main():
             print "Could not find %s. Running jslint on input files." % options.makefile 
         projects = CreateProjects(options)
     else:    
-        projects = ParseLazyJson(file(options.makefile, "r").read())
+        projects = ParseLazyJson(file(options.makefile, "rb").read())
 
     if len(options.names) == 0:
         if len(projects) == 1:
