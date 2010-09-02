@@ -924,6 +924,7 @@ def CheckEnvironment(projects, names):
     haveJava = False
     haveRhino = False
     needRhino = not IsWindows
+    needJava = needJava or (not IsWindows)
 
     # Check if any projects use the closure compiler. If so, we need java
     for name in names:
@@ -945,6 +946,17 @@ def CheckEnvironment(projects, names):
                 print "Cannot find Java. Please install it from www.java.com."
                 os.system("start http://www.java.com")
                 okay = False
+    elif needJava:
+        path = os.environ["PATH"].split(":")
+        for folder in path:
+            java = os.path.join(folder, "java")
+            if os.path.isfile( java ):
+                break
+        else:
+            print "Java is not installed on this system. Please install " + \
+                  "the sun-java6-bin package or equivalent."
+            okay = False     
+
     return okay
 
 def CreateProjects(options):
