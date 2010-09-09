@@ -8,6 +8,7 @@ This is free software. It is released to the public domain.
 
 The JZBUILD software may include jslint software, which is covered under the
 following license.
+
 /*
 Copyright (c) 2002 Douglas Crockford  (www.JSLint.com)
 
@@ -34,6 +35,7 @@ SOFTWARE.
 
 The JZBUILD software may include an "externs" file taken from the Google
 Closure project. That portion is covered under this license:
+
 /*
  * Copyright 2009 Google Inc.
  *
@@ -92,6 +94,9 @@ COMPILERS = {
         "filename":
             "compiler.jar",
 
+        # These options are always specified.
+        "requiredOptions": [],    
+
         # Command line option that must precede each input filename
         "inputOption":
             "--js",
@@ -103,7 +108,12 @@ COMPILERS = {
         # Default options to use if none are specified
         "defaultOptions": [
             "--compilation_level", "SIMPLE_OPTIMIZATIONS",
-            "--warning_level", "VERBOSE" ]
+            "--warning_level", "VERBOSE" ],
+
+        # Set this to True if the tool can't take the input on the command
+        # line, and instead requires input to be concatenated together and
+        # piped to its standard input.
+        "requiresStdin": False,
 
     },
 
@@ -112,9 +122,11 @@ COMPILERS = {
             "http://yuilibrary.com/downloads/yuicompressor/yuicompressor-2.4.2.zip",
         "filename":
             "yuicompressor-2.4.2/build/yuicompressor-2.4.2.jar",
+        "requiredOptions": ["--type", "js"],
         "inputOption": "",
         "outputOption": "-o",
         "defaultOptions": [],    
+        "requiresStdin": True,
     },
 }
 
@@ -823,6 +835,10 @@ def RunCompiler(type, files, output, compilerOptions, prepend, exports):
     compiler = COMPILERS[type]
     compilerFileName = os.path.join( GetStorageFolder(), 
         os.path.basename(compiler["filename"] ) )
+
+    needsStdin = \
+        "requiresStdin" in compiler and \
+        compiler["requiresStdin"] == True
     
     DownloadProgram( compiler["download"], compiler["filename"],
             compilerFileName )
@@ -831,6 +847,8 @@ def RunCompiler(type, files, output, compilerOptions, prepend, exports):
 
     cmdLine = [ "java", "-jar", compilerFileName ]
     cmdLine.extend( compilerOptions )
+    if "requiredOptions" in compiler:
+        cmdLine.extend( compiler["requiredOptions"] )
 
     if type == "closure":
         externs = os.path.join(GetStorageFolder(), "externs.js")
@@ -841,10 +859,12 @@ def RunCompiler(type, files, output, compilerOptions, prepend, exports):
             f.close()
         cmdLine.extend( ["--externs", externs ] )
 
-    for f in files:
-        if compiler["inputOption"] != "":
-            cmdLine.append( compiler["inputOption"] )
-        cmdLine.append(f)
+    
+    if not needsStdin:
+        for f in files:
+            if compiler["inputOption"] != "":
+                cmdLine.append( compiler["inputOption"] )
+            cmdLine.append(f)
 
     if type == 'closure':
         exportFile = tempfile.NamedTemporaryFile(suffix=".js", delete=False)
@@ -864,7 +884,17 @@ def RunCompiler(type, files, output, compilerOptions, prepend, exports):
         print cmd ,
     print
 
-    subprocess.call(cmdLine, stdout=outputFile)
+    if needsStdin:
+        process = \
+            subprocess.Popen(cmdLine, stdout=outputFile, stdin=subprocess.PIPE)
+
+        for f in files:
+            print "   Reading %s" % f
+            process.stdin.write( open( f, "rb" ).read() )
+        process.stdin.close()
+        process.wait()
+    else:    
+        subprocess.call(cmdLine, stdout=outputFile)
 
     if type == 'closure':
         os.unlink(exportFileName)
