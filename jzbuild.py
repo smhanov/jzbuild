@@ -33,26 +33,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-The JZBUILD software may include an "externs" file taken from the Google
-Closure project. That portion is covered under this license:
-
-/*
- * Copyright 2009 Google Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
-
 """
 
 import re
@@ -128,6 +108,15 @@ COMPILERS = {
         "defaultOptions": [],    
         "requiresStdin": True,
     },
+}
+
+EXTERNS = {
+    "jquery-1.5.js":
+        "http://closure-compiler.googlecode.com/svn/trunk/contrib/externs/jquery-1.5.js",
+    "json.js":
+        "http://closure-compiler.googlecode.com/svn/trunk/contrib/externs/json.js",
+    "jquery-mobile.js":
+        "http://github.com/smhanov/jzbuild/raw/master/externs/jquery-mobile.js",
 }
 
 VALID_COMPILERS = COMPILERS.keys();
@@ -816,6 +805,14 @@ def DownloadProgram(url, fileInZip, outputPath):
 
     return True    
 
+def DownloadExterns():
+    """Downloads Closure compiler externs files, if necessary."""
+    for (extern,url) in EXTERNS.iteritems():
+        path = os.path.join( GetStorageFolder(), extern )
+        if not os.path.exists( path ):
+            print "Fetching %s" % path
+            file(path,"wb").write(urllib2.urlopen(url).read())
+
 def RunCompiler(type, files, output, compilerOptions, prepend, exports):
     """Downloads and runs the compiler of the given type.
 
@@ -851,14 +848,10 @@ def RunCompiler(type, files, output, compilerOptions, prepend, exports):
         cmdLine.extend( compiler["requiredOptions"] )
 
     if type == "closure":
-        externs = os.path.join(GetStorageFolder(), "externs.js")
-        if not os.path.exists(externs):
-            # decompress externs file
-            f = file(externs, "wb")
-            f.write(zlib.decompress(base64.b64decode(CLOSURE_EXTERNS)))
-            f.close()
-        cmdLine.extend( ["--externs", externs ] )
-
+        DownloadExterns()
+        for extern in EXTERNS.keys():
+            cmdLine.extend( ["--externs", os.path.join( GetStorageFolder(),
+                        extern ) ] )
     
     if not needsStdin:
         for f in files:
@@ -984,7 +977,7 @@ def CheckEnvironment(projects, names):
                 break
         else:
             print "Java is not installed on this system. Please install " + \
-                  "the sun-java6-bin package or equivalent."
+                  "the default-jre or openjdk-6-jre or sun-java6-bin package or equivalent."
             okay = False     
 
     return okay
@@ -2247,49 +2240,6 @@ K7NH4/4QhwOUCKlJFbBosCqoGnj2XwwiCyey2hSssgVMtPD2CKlckm3mGkpEIREGZqWekdLEd5rSQin
 ZmoowfBs8Ojw/7h7/pHn5vw/aok+UZK91ZkUKxodv/GIacGb+r5q3zwA2jYL7Ks2wtvVjAhFjDiZHW7
 67HolESOforXBooKQGgY/A2DzL6GeQOUkuKBa7NwJ23rttCNec1O1Jrd21wxrNFShsDbqejkZ/fg59P
 qaff0Dfxf7Z++2e897UHGrw7C3V8d7fZsjf97ndbdI8Q2Iub/ALzE3cM=
-"""
-
-CLOSURE_EXTERNS = """
-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
-4R+0jz4uOOcm3eG+lE7DCrKWf4doEH8P5PkRLg=
 """
 
 if __name__ == '__main__': 
