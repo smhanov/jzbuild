@@ -810,7 +810,7 @@ def DownloadExterns():
     for (extern,url) in EXTERNS.iteritems():
         path = os.path.join( GetStorageFolder(), extern )
         if not os.path.exists( path ):
-            print "Fetching %s" % path
+            print "Fetching %s" % url
             file(path,"wb").write(urllib2.urlopen(url).read())
 
 def RunCompiler(type, files, output, compilerOptions, prepend, exports):
