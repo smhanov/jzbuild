@@ -860,10 +860,9 @@ def RunCompiler(type, files, output, compilerOptions, prepend, exports):
             cmdLine.append(f)
 
     if type == 'closure':
-        exportFile = tempfile.NamedTemporaryFile(suffix=".js", delete=False)
+        exportFile = tempfile.NamedTemporaryFile(suffix=".js")
         exportFileName = exportFile.name
         exportFile.write(exports)
-        exportFile.close()
         cmdLine.extend([ "--js", exportFileName])
 
     outputFile = file(output, "w")
@@ -888,9 +887,6 @@ def RunCompiler(type, files, output, compilerOptions, prepend, exports):
         process.wait()
     else:    
         subprocess.call(cmdLine, stdout=outputFile)
-
-    if type == 'closure':
-        os.unlink(exportFileName)
 
 def JoinFiles( files, outputFile ):    
     """Concatenates the contents of the given files and writes the output to
