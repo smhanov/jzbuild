@@ -119,6 +119,23 @@ EXTERNS = {
         "http://github.com/smhanov/jzbuild/raw/master/externs/jquery-mobile.js",
 }
 
+COFFEESCRIPT_URL = \
+    "https://github.com/downloads/yeungda/jcoffeescript/jcoffeescript-1.1.jar"
+
+
+def GetStorageFolder():
+    """Returns the path to a location where we can store downloads"""
+
+    # Seems to work on windows 7 too   
+    path = os.path.join(os.path.expanduser("~"), ".jzbuild")
+    if not os.path.isdir(path):
+        print "Creating %s" % path
+        os.mkdir(path)
+    return path 
+
+COFFEESCRIPT_PATH = \
+    os.path.join(GetStorageFolder(), os.path.basename( COFFEESCRIPT_URL ) )
+
 VALID_COMPILERS = COMPILERS.keys();
 VALID_COMPILERS.append("cat")
 
@@ -141,6 +158,9 @@ DESCRIPTION
     found, it reads the list of projects and options from that file. Otherwise,
     it uses the options given from the command line, or defaults.
 
+    Jzbuild will download and use the Coffeescript compiler to seemlessly
+    handle files ending in ".coffee".
+
     [files]
 
         If no filenames are given and no makefile is present, Jzbuild will
@@ -162,7 +182,7 @@ DESCRIPTION
         Specifies a file for prepending. The include path will be searched for
         the file, and it will be prepended to the output. This option may be
         specified multiple times. This option is ignored if a makefile is
-        present. 
+        resent. 
 
     -I<path>
 
@@ -518,16 +538,6 @@ def ReplaceSlashes(list):
     for item in list:
         newList.append( item.replace( "/", os.path.sep ) )
     return newList
-
-def GetStorageFolder():
-    """Returns the path to a location where we can store downloads"""
-
-    # Seems to work on windows 7 too   
-    path = os.path.join(os.path.expanduser("~"), ".jzbuild")
-    if not os.path.isdir(path):
-        print "Creating %s" % path
-        os.mkdir(path)
-    return path 
             
 
 class DependencyGraph:
@@ -627,8 +637,11 @@ class Analysis:
 
         self.exports = []
 
-        includeRe = re.compile(r"""\/\/#include\s+[<"]([^>"]+)[>"]""")
-        exportRe = re.compile(r"""\/\/\@export ([A-Za-z_\$][A-Za-z_0-9\.\$]*)""")
+        includeRe_js = re.compile(r"""\/\/#include\s+[<"]([^>"]+)[>"]""")
+        exportRe_js = re.compile(r"""\/\/\@export ([A-Za-z_\$][A-Za-z_0-9\.\$]*)""")
+
+        includeRe_coffee = re.compile(r"""#include\s+[<"]([^>"]+)[>"]""")
+        exportRe_coffee = re.compile(r"""#@export ([A-Za-z_\$][A-Za-z_0-9\.\$]*)""")
 
         self.vpath = vpath
 
@@ -641,6 +654,13 @@ class Analysis:
             contents = open( path, "r" ).readlines()
             graph.addNode( path )
             filesProcessed[path] = 1;
+
+            if path.endswith(".coffee"):
+                includeRe = includeRe_coffee
+                exportRe = exportRe_coffee
+            else:
+                includeRe = includeRe_js
+                exportRe = exportRe_js
 
             for line in contents:
 
@@ -697,15 +717,25 @@ class Analysis:
         for path in self.vpath:
             # join it with the filename
             fullname = os.path.join(path, file)
+            (base, ext) = os.path.splitext(fullname)
 
             # if it exists, return it.
-            if os.path.exists( fullname ):
+            if os.path.exists( base + ".coffee" ):
+                return base + ".coffee"
+            elif os.path.exists( fullname ):
                 return fullname
+
         else:
             return None
 
     def getFileList(self):
         return self.fileList
+
+    def replaceFile(self, source, destination):
+        for i in range(len(self.fileList)):
+            if self.fileList[i] == source:
+                self.fileList[i] = destination
+                return
 
     def getExports(self):
         # keep track of exports already written.
@@ -753,7 +783,7 @@ def RunJsLint(files, targetTime, options):
             f.close()
 
         for f in files:
-            if os.path.getmtime(f) > targetTime:
+            if os.path.getmtime(f) > targetTime and not f.endswith(".coffee"):
                 print f + "..."
                 os.system("cscript /Nologo \"" + jslint + "\" <\"%s\"" % f) 
                 numProcessed += 1
@@ -774,6 +804,7 @@ def RunJsLint(files, targetTime, options):
         cmd.append( jslint )
 
         for f in files:
+            if f.endswith(".coffee"): continue
             if os.path.getmtime(f) > targetTime:
                 cmd.append(f);
                 numProcessed += 1
@@ -782,6 +813,20 @@ def RunJsLint(files, targetTime, options):
             subprocess.call(cmd)
 
     return numProcessed
+
+def CompileCoffeeScript( analysis, options ):
+    """
+        For files that end in .coffee, compile them to .js if they are newer
+        than the existing .js file.
+    """
+    for filename in analysis.getFileList():
+        (path, ext) = os.path.splitext(filename)
+        if ext == ".coffee":
+            destination = path + ".js"
+            if not os.path.exists(destination) or \
+               os.path.getmtime(destination) < os.path.getmtime(filename):
+                RunCoffeeScript( filename, destination )
+            analysis.replaceFile( filename, destination )
 
 def DownloadProgram(url, fileInZip, outputPath):
     """Given a url to a zip file, a path to a file within that zip file, and an
@@ -804,6 +849,27 @@ def DownloadProgram(url, fileInZip, outputPath):
         file(outputPath, "wb").write(zip.read(fileInZip))
 
     return True    
+
+HaveCoffeeScript = os.path.exists( COFFEESCRIPT_PATH )
+
+def DownloadCoffeeScript():
+    if not HaveCoffeeScript:
+        print "Downloading JCoffeescript..."
+        open(COFFEESCRIPT_PATH, "w").write( urllib2.urlopen(COFFEESCRIPT_URL).read() )
+        HaveCoffeeSCript = True
+
+def RunCoffeeScript( source, destination ):
+    DownloadCoffeeScript()
+    commands = [ "java", "-jar", COFFEESCRIPT_PATH, "--bare" ]
+    print "Compiling %s -> %s" % (source, destination)
+
+    output = open(destination, "wb")
+    process = \
+        subprocess.Popen(commands, stdout=output, stdin=subprocess.PIPE)
+
+    process.stdin.write( open( source, "rb" ).read() )
+    process.stdin.close()
+    process.wait()
 
 def DownloadExterns():
     """Downloads Closure compiler externs files, if necessary."""
@@ -1207,6 +1273,7 @@ def main():
             pass
 
         RunJsLint( analysis.getFileList(), targetTime, options )
+        CompileCoffeeScript( analysis, options )
 
         if output != None:
             if compiler != "cat":
