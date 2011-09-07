@@ -47,12 +47,6 @@ import glob
 import base64
 import zlib
 import tempfile
-"""
-Todo:
-   * Document makefile format
-   * detect circular dependencies
-   - @export
-"""
 
 MAKEFILE_NAME = "makefile.jz"
 
@@ -119,10 +113,10 @@ EXTERNS = {
         "http://github.com/smhanov/jzbuild/raw/master/externs/jquery-mobile.js",
 }
 
+JCOFFEESCRIPT_URL = \
+    "http://github.com/downloads/smhanov/jcoffeescript/jcoffeescript-1.1.jar"
 COFFEESCRIPT_URL = \
-    "https://github.com/downloads/yeungda/jcoffeescript/jcoffeescript-1.1.jar"
-
-
+    "http://github.com/downloads/smhanov/coffee-script/coffee-script.js"
 def GetStorageFolder():
     """Returns the path to a location where we can store downloads"""
 
@@ -132,6 +126,9 @@ def GetStorageFolder():
         print "Creating %s" % path
         os.mkdir(path)
     return path 
+
+JCOFFEESCRIPT_PATH = \
+    os.path.join(GetStorageFolder(), os.path.basename( JCOFFEESCRIPT_URL ) )
 
 COFFEESCRIPT_PATH = \
     os.path.join(GetStorageFolder(), os.path.basename( COFFEESCRIPT_URL ) )
@@ -645,6 +642,10 @@ class Analysis:
 
         self.vpath = vpath
 
+        # contains named temporary files. They will be automatically deleted by
+        # python when the Analysis goes out of scope.
+        self.tempFiles = []
+
         def processFile( path ):
             """Given the full path to a file, open it and look for includes. For
             each include found, add it to the file list and update the dependency
@@ -695,6 +696,25 @@ class Analysis:
 
         # spit out dependencies...
         self.fileList = graph.walk()
+
+    def addFileToStart( self, filename ):
+        """
+            Add a file to the start. This is used to place the coffee script
+            utilities at the top of the compiled output. It is different from
+            prepended files because the contents are passed to the compiler,
+            whereas prepended files are not.
+        """
+        self.fileList = [filename] + self.fileList
+
+    def addContentToStart( self, contents ):
+        temp = tempfile.NamedTemporaryFile( mode="wb", delete=False )
+        temp.write(contents)
+        self.tempFiles.append( temp.name )
+        print "Add content to start %s" % contents
+        print "in filename: %s" % temp.name
+        print self.fileList
+        self.addFileToStart( temp.name )
+        print self.fileList
 
     def prependFiles( self, fileNames ):
         """Search for each file in the vpath and prepend its path to the
@@ -819,14 +839,20 @@ def CompileCoffeeScript( analysis, options ):
         For files that end in .coffee, compile them to .js if they are newer
         than the existing .js file.
     """
+    anyCoffee = False
+
     for filename in analysis.getFileList():
         (path, ext) = os.path.splitext(filename)
         if ext == ".coffee":
             destination = path + ".js"
+            anyCoffee = True
             if not os.path.exists(destination) or \
                os.path.getmtime(destination) < os.path.getmtime(filename):
                 RunCoffeeScript( filename, destination )
             analysis.replaceFile( filename, destination )
+
+    if anyCoffee:
+        analysis.addContentToStart( COFFEESCRIPT_UTILITIES )
 
 def DownloadProgram(url, fileInZip, outputPath):
     """Given a url to a zip file, a path to a file within that zip file, and an
@@ -850,17 +876,21 @@ def DownloadProgram(url, fileInZip, outputPath):
 
     return True    
 
-HaveCoffeeScript = os.path.exists( COFFEESCRIPT_PATH )
+HaveCoffeeScript = os.path.exists( JCOFFEESCRIPT_PATH )
 
 def DownloadCoffeeScript():
+    global HaveCoffeeScript
     if not HaveCoffeeScript:
         print "Downloading JCoffeescript..."
+        open(JCOFFEESCRIPT_PATH, "wb").write( urllib2.urlopen(JCOFFEESCRIPT_URL).read() )
+        print COFFEESCRIPT_URL
         open(COFFEESCRIPT_PATH, "wb").write( urllib2.urlopen(COFFEESCRIPT_URL).read() )
-        HaveCoffeeSCript = True
+        HaveCoffeeScript = True
 
 def RunCoffeeScript( source, destination ):
     DownloadCoffeeScript()
-    commands = [ "java", "-jar", COFFEESCRIPT_PATH, "--bare" ]
+    commands = [ "java", "-jar", JCOFFEESCRIPT_PATH, "--bare", "--noutil",
+        "--coffeescriptjs", COFFEESCRIPT_PATH ]
     print "Compiling %s -> %s" % (source, destination)
 
     output = open(destination, "wb")
@@ -961,6 +991,9 @@ def JoinFiles( files, outputFile ):
     sys.stderr.write("Joining " + " ".join(files) + "\n" )
     output = file(outputFile, "wb")
     for inputName in files:
+        if inputName.startswith("/tmp"):
+            print "Contents of %s:\n%s" % (inputName, 
+                file(inputName, "rb").read())
         output.write(file(inputName, "rb").read())
 
 def GetKey( projects, name, key, makeArray=False ):
@@ -1137,9 +1170,21 @@ class Options:
                 else:        
                     self.compiler = args[ i + 1]
                     i += 1
-
             elif args[i].startswith('-I'):
+                # Set the include path
                 self.include.append( args[i][2:] )
+
+            elif args[i].startswith('--'):
+                # Allow the user to specify a compiler without writing
+                # "--compiler" first.
+                for compiler in VALID_COMPILERS:
+                    if "--" + compiler == args[i]:
+                        self.compiler = args[i]
+                        break
+                else:
+                    print "Error: Unknown option %s" % (args[i])
+                    sys.exit(-1)
+
             else:
                 self.names.append( args[i] )
 
@@ -2303,6 +2348,30 @@ K7NH4/4QhwOUCKlJFbBosCqoGnj2XwwiCyey2hSssgVMtPD2CKlckm3mGkpEIREGZqWekdLEd5rSQin
 ZmoowfBs8Ojw/7h7/pHn5vw/aok+UZK91ZkUKxodv/GIacGb+r5q3zwA2jYL7Ks2wtvVjAhFjDiZHW7
 67HolESOforXBooKQGgY/A2DzL6GeQOUkuKBa7NwJ23rttCNec1O1Jrd21wxrNFShsDbqejkZ/fg59P
 qaff0Dfxf7Z++2e897UHGrw7C3V8d7fZsjf97ndbdI8Q2Iub/ALzE3cM=
+"""
+
+COFFEESCRIPT_UTILITIES = """
+var __hasProp = Object.prototype.hasOwnProperty;
+var __extends = function (child, parent) {
+  for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; }
+  /** @constructor */
+  function ctor() { this.constructor = child; }
+  ctor.prototype = parent.prototype;
+  child.prototype = new ctor;
+  child.__super__ = parent.prototype;
+  return child;
+};
+
+var __bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; }
+
+var __indexOf = Array.prototype.indexOf || function(item) {
+      for (var i = 0, l = this.length; i < l; i++) {
+        if (this[i] === item) return i;
+      }
+      return -1;
+};
+
+var __slice = Array.prototype.slice;
 """
 
 if __name__ == '__main__': 
