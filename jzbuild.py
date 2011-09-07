@@ -855,7 +855,7 @@ HaveCoffeeScript = os.path.exists( COFFEESCRIPT_PATH )
 def DownloadCoffeeScript():
     if not HaveCoffeeScript:
         print "Downloading JCoffeescript..."
-        open(COFFEESCRIPT_PATH, "w").write( urllib2.urlopen(COFFEESCRIPT_URL).read() )
+        open(COFFEESCRIPT_PATH, "wb").write( urllib2.urlopen(COFFEESCRIPT_URL).read() )
         HaveCoffeeSCript = True
 
 def RunCoffeeScript( source, destination ):
