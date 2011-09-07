@@ -99,7 +99,7 @@ COMPILERS = {
 
     "yui": {
         "download":
-            "http://yuilibrary.com/downloads/yuicompressor/yuicompressor-2.4.2.zip",
+            "http://yui.zenfs.com/releases/yuicompressor/yuicompressor-2.4.2.zip",
         "filename":
             "yuicompressor-2.4.2/build/yuicompressor-2.4.2.jar",
         "requiredOptions": ["--type", "js"],
