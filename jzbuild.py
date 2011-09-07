@@ -710,11 +710,7 @@ class Analysis:
         temp = tempfile.NamedTemporaryFile( mode="wb", delete=False )
         temp.write(contents)
         self.tempFiles.append( temp.name )
-        print "Add content to start %s" % contents
-        print "in filename: %s" % temp.name
-        print self.fileList
         self.addFileToStart( temp.name )
-        print self.fileList
 
     def prependFiles( self, fileNames ):
         """Search for each file in the vpath and prepend its path to the
