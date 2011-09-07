@@ -6,6 +6,9 @@ By Steve Hanov (steve.hanov@gmail.com)
 
 This is free software. It is released to the public domain. 
 
+------------------------------------------------------------------------------
+------------------------------------------------------------------------------
+------------------------------------------------------------------------------
 The JZBUILD software may include jslint software, which is covered under the
 following license.
 
@@ -33,6 +36,52 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
+------------------------------------------------------------------------------
+------------------------------------------------------------------------------
+------------------------------------------------------------------------------
+Coffeescript is covered under the following license.
+
+Copyright (c) 2011 Jeremy Ashkenas
+
+Permission is hereby granted, free of charge, to any person
+obtaining a copy of this software and associated documentation
+files (the "Software"), to deal in the Software without
+restriction, including without limitation the rights to use,
+copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the
+Software is furnished to do so, subject to the following
+conditions:
+
+The above copyright notice and this permission notice shall be
+included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
+------------------------------------------------------------------------------
+------------------------------------------------------------------------------
+------------------------------------------------------------------------------
+JCoffeeScript is covered under the following license:
+/*
+ * Copyright 2010 David Yeung
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 """
 
 import re
@@ -82,6 +131,12 @@ COMPILERS = {
         # Default options to use if none are specified
         "defaultOptions": [
             "--compilation_level", "SIMPLE_OPTIMIZATIONS",
+            "--warning_level", "VERBOSE" ],
+
+        # Options to use if none are specified and user is doing a --release
+        # build.
+        "releaseOptions": [
+            "--compilation_level", "ADVANCED_OPTIMIZATIONS",
             "--warning_level", "VERBOSE" ],
 
         # Set this to True if the tool can't take the input on the command
@@ -192,6 +247,11 @@ DESCRIPTION
         Specifies the compiler to use. This option is ignored if a makefile is
         present. Valid options are VALID_COMPILERS. If you do not have the
         given compiler, it will be downloaded.
+
+    --release
+        
+         Specifies that we should use a advanced compilation options, such 
+         as minification, if available.
 
     clean
         
@@ -886,6 +946,7 @@ def DownloadCoffeeScript():
 def RunCoffeeScript( source, destination ):
     DownloadCoffeeScript()
     commands = [ "java", "-jar", JCOFFEESCRIPT_PATH, "--bare", "--noutil",
+        "--closure",
         "--coffeescriptjs", COFFEESCRIPT_PATH ]
     print "Compiling %s -> %s" % (source, destination)
 
@@ -1074,7 +1135,7 @@ def CheckEnvironment(projects, names):
     return okay
 
 def CreateProjects(options):
-    """No Makefile.jz exists Automatically create one based on the files in the
+    """No Makefile.jz exists. Automatically create one based on the files in the
        current working folder and the given options."""
 
     input = options.input
@@ -1104,8 +1165,15 @@ def CreateProjects(options):
         projects["release"]["compiler"] = options.compiler
        
         if options.compiler != "cat":
-            projects["release"]["compilerOptions"] = \
-                COMPILERS[options.compiler]["defaultOptions"]
+            if options.release and \
+                "releaseOptions" in COMPILERS[options.compiler]:
+
+                projects["release"]["compilerOptions"] = \
+                    COMPILERS[options.compiler]["releaseOptions"]
+
+            else:
+                projects["release"]["compilerOptions"] = \
+                    COMPILERS[options.compiler]["defaultOptions"]
 
 
     return projects
@@ -1123,6 +1191,7 @@ class Options:
         self.prepend = [];
         self.makefile = MAKEFILE_NAME
         self.compiler = 'cat'
+        self.release = False
         
         i = 1
         args = sys.argv;
@@ -1166,6 +1235,10 @@ class Options:
                 else:        
                     self.compiler = args[ i + 1]
                     i += 1
+
+            elif args[i] == '--release':
+                self.release = True
+
             elif args[i].startswith('-I'):
                 # Set the include path
                 self.include.append( args[i][2:] )
@@ -1175,7 +1248,7 @@ class Options:
                 # "--compiler" first.
                 for compiler in VALID_COMPILERS:
                     if "--" + compiler == args[i]:
-                        self.compiler = args[i]
+                        self.compiler = args[i][2:]
                         break
                 else:
                     print "Error: Unknown option %s" % (args[i])
