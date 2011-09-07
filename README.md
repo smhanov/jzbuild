@@ -1,4 +1,3 @@
-
 I love languages where you need years of experience to write code that works,
 and languages where if you don't do everything exactly right, you will shoot
 yourself in the foot. (See my article [C++: A language for
@@ -195,6 +194,7 @@ jzbuild.py release
         ]
     }
 }
+</pre>
 
 ## Goodies to make the Closure compiler work properly
 
