@@ -14,10 +14,11 @@ JZBUILD is a build system to simplify the process.
 
 [Download JZBUILD](http://github.com/smhanov/jzbuild/raw/master/jzbuild.py)
 
-Like any of the other dozen javascript build systems, JZBUILD will:
+JZBUILD will:
 
 * Run all of your javascript through a built-in copy of jslint for error
 checking.
+* Convert Coffeescript files to Javascript.
 * Concatenate files together and feed them into the Closure compiler or YUI
 compressor, without sending your code over the web.
 * Process include directives. JZBUILD resolves dependencies so your files
@@ -195,6 +196,13 @@ jzbuild.py release
     }
 }
 </pre>
+
+## Coffeescript support
+If any .coffee files are specified as input, JZBUILD will download Coffeescript and use it to convert them to 
+Javascript. It stores the result in the same location as the original .coffee file, except with a .js extension.
+
+A special version of coffeescript is used that works with the Google closure compiler, and does not depend on 
+Google libraries.
 
 ## Goodies to make the Closure compiler work properly
 
