@@ -890,12 +890,20 @@ def RunJsLint(files, targetTime, options):
 
     return numProcessed
 
-def CompileCoffeeScript( analysis, options ):
+def CompileCoffeeScript( analysis, options, compiler, joined ):
     """
         For files that end in .coffee, compile them to .js if they are newer
         than the existing .js file.
+
+        compiler is the name of the compiler that will be used.
+
+        noJoin is specified when there is no output file. In that case, all the
+        coffeescript files will be translated, but they will not be joined
+        together later. That affects the options that we use.
     """
     anyCoffee = False
+
+    closureMode = compiler == 'closure' and joined
 
     for filename in analysis.getFileList():
         (path, ext) = os.path.splitext(filename)
@@ -904,7 +912,7 @@ def CompileCoffeeScript( analysis, options ):
             anyCoffee = True
             if not os.path.exists(destination) or \
                os.path.getmtime(destination) < os.path.getmtime(filename):
-                RunCoffeeScript( filename, destination )
+                RunCoffeeScript( filename, destination, closureMode )
             analysis.replaceFile( filename, destination )
 
     if anyCoffee:
@@ -943,11 +951,15 @@ def DownloadCoffeeScript():
         open(COFFEESCRIPT_PATH, "wb").write( urllib2.urlopen(COFFEESCRIPT_URL).read() )
         HaveCoffeeScript = True
 
-def RunCoffeeScript( source, destination ):
+def RunCoffeeScript( source, destination, closureMode ):
     DownloadCoffeeScript()
-    commands = [ "java", "-jar", JCOFFEESCRIPT_PATH, "--bare", "--noutil",
-        "--closure",
+    commands = [ "java", "-jar", JCOFFEESCRIPT_PATH, 
         "--coffeescriptjs", COFFEESCRIPT_PATH ]
+
+    if closureMode:
+        # Add closure annotations
+        commands.extend( ["--bare", "--noutil", "--closure"] )
+
     print "Compiling %s -> %s" % (source, destination)
 
     output = open(destination, "wb")
@@ -1387,7 +1399,7 @@ def main():
             pass
 
         RunJsLint( analysis.getFileList(), targetTime, options )
-        CompileCoffeeScript( analysis, options )
+        CompileCoffeeScript( analysis, options, compiler, output != None )
 
         if output != None:
             if compiler != "cat":
