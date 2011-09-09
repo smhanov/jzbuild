@@ -837,6 +837,9 @@ class Analysis:
 
         return str        
 
+    def getInputFilesEndingWith( self, extension ):
+        return filter( lambda f: f.endswith( extension), self.fileList )
+
 
 def RunJsLint(files, targetTime, options):
     """Run Jslint on each file in the list that has a modification time greater
@@ -892,8 +895,8 @@ def RunJsLint(files, targetTime, options):
 
 def CompileCoffeeScript( analysis, options, compiler, joined ):
     """
-        For files that end in .coffee, compile them to .js if they are newer
-        than the existing .js file.
+        For files that end in .coffee, compile them to .coffee.js if they are
+        newer than the existing .js file.
 
         compiler is the name of the compiler that will be used.
 
@@ -903,12 +906,12 @@ def CompileCoffeeScript( analysis, options, compiler, joined ):
     """
     anyCoffee = False
 
-    closureMode = compiler == 'closure' and joined
+    closureMode = compiler == 'closure' or joined
 
     for filename in analysis.getFileList():
         (path, ext) = os.path.splitext(filename)
         if ext == ".coffee":
-            destination = path + ".js"
+            destination = path + ".coffee.js"
             anyCoffee = True
             if not os.path.exists(destination) or \
                os.path.getmtime(destination) < os.path.getmtime(filename):
@@ -1060,9 +1063,6 @@ def JoinFiles( files, outputFile ):
     sys.stderr.write("Joining " + " ".join(files) + "\n" )
     output = file(outputFile, "wb")
     for inputName in files:
-        if inputName.startswith("/tmp"):
-            print "Contents of %s:\n%s" % (inputName, 
-                file(inputName, "rb").read())
         output.write(file(inputName, "rb").read())
 
 def GetKey( projects, name, key, makeArray=False ):
@@ -1366,15 +1366,6 @@ def main():
                 output )
             continue
 
-        # if we are asked to clean, then simply delete the output file
-        if options.clean:
-            if output != None:
-                print "Deleting %s" % output
-                try:
-                    os.unlink( output )
-                except:
-                    pass
-            continue
 
         # Normalize the slashes in the path names.
         input = ReplaceSlashes(input)
@@ -1382,6 +1373,25 @@ def main():
 
         # Process included files to obtain a complete list of files.
         analysis = Analysis(input, include)
+
+        # if we are asked to clean, then simply delete the output file
+        if options.clean:
+            filesToDelete = []
+            if output != None:
+                filesToDelete.append( output )
+
+            # also delete the .js files generated from coffeescript
+            for coffeeFile in analysis.getInputFilesEndingWith(".coffee"):
+                filesToDelete.append( coffeeFile + ".js" )
+
+            for filename in filesToDelete:
+                try:
+                    os.unlink( filename )
+                    print "Deleted %s" % filename
+                except:
+                    pass
+
+            continue
 
         # Also process prepended files
         prependedFiles = Analysis( prepend, include ).getFileList()
