@@ -204,6 +204,23 @@ Javascript. It stores the result in the same location as the original .coffee fi
 A special version of coffeescript is used that works with the Google closure compiler, and does not depend on 
 Google libraries.
 
+If you specify the --closure compiler on the command line, the code will be type checked for you. To get the maximum
+benefit from the type checking, you can annotate your code with types. Refer to 
+[Google's Closure Annotation page](http://code.google.com/closure/compiler/docs/js-for-compiler.html) for examples. 
+Enclose closure annotations between ###* ### comments. For example:
+
+<pre>
+
+###* @param {number} count
+     @return {string} 
+###
+makeSpaces: (count) ->
+    result = []
+    result.push " " for i in count
+    result.join ""
+      
+</pre>
+
 ## Goodies to make the Closure compiler work properly
 
 ### Built in externs
