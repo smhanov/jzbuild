@@ -1031,6 +1031,7 @@ def RunCompiler(type, files, output, compilerOptions, prepend, exports):
         exportFile = tempfile.NamedTemporaryFile(suffix=".js")
         exportFileName = exportFile.name
         exportFile.write(exports)
+        exportFile.flush()
         cmdLine.extend([ "--js", exportFileName])
 
     outputFile = file(output, "w")
