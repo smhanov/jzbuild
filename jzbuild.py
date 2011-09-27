@@ -96,6 +96,7 @@ import glob
 import base64
 import zlib
 import tempfile
+import atexit
 
 MAKEFILE_NAME = "makefile.jz"
 
@@ -335,6 +336,20 @@ MAKEFILE FORMAT
 JSLINT_RHINO = ""
 JSLINT_WSH = ""
 CLOSURE_EXTERNS = ""
+
+# Keep temporary files here so they are not deleted until program exit.
+# There are problems with using NamedTemporaryFile delete=True on windows, so
+# do it manually.
+TemporaryFiles = []
+
+def cleanupBeforeExit():
+    for temp in TemporaryFiles:
+        if os.path.exists( temp.name ):
+            temp.close()
+            os.unlink( temp.name )
+
+atexit.register( cleanupBeforeExit )
+
 
 class LazyJsonParser:
     """This class parses Lazy JSON. Currently it does not take advantage of
@@ -1028,7 +1043,8 @@ def RunCompiler(type, files, output, compilerOptions, prepend, exports):
             cmdLine.append(f)
 
     if type == 'closure':
-        exportFile = tempfile.NamedTemporaryFile(suffix=".js")
+        exportFile = tempfile.NamedTemporaryFile(suffix=".js", delete=False)
+        TemporaryFiles.append( exportFile )
         exportFileName = exportFile.name
         exportFile.write(exports)
         exportFile.flush()
