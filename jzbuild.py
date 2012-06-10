@@ -84,19 +84,20 @@ JCoffeeScript is covered under the following license:
  */
 """
 
-import re
+import atexit
+import base64
+import cStringIO
+import glob
 import os
 import platform
+import re
 import subprocess
 import sys
-import urllib2
-import cStringIO
-import zipfile
-import glob
-import base64
-import zlib
 import tempfile
-import atexit
+import time
+import urllib2
+import zipfile
+import zlib
 
 MAKEFILE_NAME = "makefile.jz"
 
@@ -251,8 +252,12 @@ DESCRIPTION
 
     --release
         
-         Specifies that we should use a advanced compilation options, such 
-         as minification, if available.
+        Specifies that we should use a advanced compilation options, such 
+        as minification, if available.
+
+    --watch
+        After compiling, monitor files for changes and recompile whenever one
+        changes.
 
     clean
         
@@ -721,6 +726,13 @@ class Analysis:
         # python when the Analysis goes out of scope.
         self.tempFiles = []
 
+        # contains the input files for the project.
+        self.inputFiles = []
+
+        # Contains list of files that comprise the project, after replacements
+        # have been made.
+        self.fileList = []
+
         def processFile( path ):
             """Given the full path to a file, open it and look for includes. For
             each include found, add it to the file list and update the dependency
@@ -771,6 +783,7 @@ class Analysis:
 
         # spit out dependencies...
         self.fileList = graph.walk()
+        self.inputFiles.extend(self.fileList)
 
     def addFileToStart( self, filename ):
         """
@@ -821,6 +834,9 @@ class Analysis:
 
     def getFileList(self):
         return self.fileList
+
+    def getInputFiles(self):
+        return self.inputFiles
 
     def replaceFile(self, source, destination):
         for i in range(len(self.fileList)):
@@ -908,7 +924,7 @@ def RunJsLint(files, targetTime, options):
 
     return numProcessed
 
-def CompileCoffeeScript( analysis, options, compiler, joined ):
+def CompileCoffeeScript( analysis, options, compiler, joined, targetTime ):
     """
         For files that end in .coffee, compile them to .coffee.js if they are
         newer than the existing .js file.
@@ -918,6 +934,8 @@ def CompileCoffeeScript( analysis, options, compiler, joined ):
         noJoin is specified when there is no output file. In that case, all the
         coffeescript files will be translated, but they will not be joined
         together later. That affects the options that we use.
+
+        Only files newer than the targetTime or the .coffee file are compiled.
     """
     anyCoffee = False
 
@@ -929,7 +947,7 @@ def CompileCoffeeScript( analysis, options, compiler, joined ):
             destination = path + ".coffee.js"
             anyCoffee = True
             if not os.path.exists(destination) or \
-               os.path.getmtime(destination) < os.path.getmtime(filename):
+               os.path.getmtime(filename) > min(targetTime, os.path.getmtime(destination)):
                 RunCoffeeScript( filename, destination, closureMode )
             analysis.replaceFile( filename, destination )
 
@@ -1221,6 +1239,7 @@ class Options:
         self.makefile = MAKEFILE_NAME
         self.compiler = 'cat'
         self.release = False
+        self.watch = False
         
         i = 1
         args = sys.argv;
@@ -1268,6 +1287,9 @@ class Options:
             elif args[i] == '--release':
                 self.release = True
 
+            elif args[i] == '--watch':
+                self.watch = True
+
             elif args[i].startswith('-I'):
                 # Set the include path
                 self.include.append( args[i][2:] )
@@ -1310,12 +1332,29 @@ class Options:
                 InstallRhino(rhino)
                 self.rhinoCmd = ["java", "-jar", rhino]    
 
-def main():
-    options = Options()
+def watchFiles(fileList, timestamp):
+    """
+        Monitor the given files for changes, and return when any are removed or
+        have a modification time after the given timestamp.
+    """
+    print("Watching files for changes...")
+    while True:
+        time.sleep(1.0)
+        for name in fileList:
+            if not os.path.exists(name) or os.path.getmtime(name) > timestamp:
+                print("Detected change in {0}".format(name))
+                return
 
-    if options.help:
-        print MAN_PAGE;
-        sys.exit(0)
+def compileProjects(options, lastCheckTime):
+    """
+        Compile all projects, using the given options.
+        Returns the complete list of input files, suitable for watching
+        changes.
+
+        Requires the time that the input files were last checked for changes (0
+        for never)
+    """
+    watchedFiles = []
 
     # Parse the json
     if not os.path.exists( options.makefile ) or options.output != None:
@@ -1383,7 +1422,6 @@ def main():
                 output )
             continue
 
-
         # Normalize the slashes in the path names.
         input = ReplaceSlashes(input)
         include = ReplaceSlashes(include)
@@ -1419,14 +1457,15 @@ def main():
             exports = ""
 
         # Get the file time of the output file, if it exists.
-        targetTime = 0
+        targetTime = lastCheckTime
         try:
-            targetTime = os.path.getmtime(output);
+            targetTime = min(lastCheckTime, os.path.getmtime(output))
         except:
             pass
 
         RunJsLint( analysis.getFileList(), targetTime, options )
-        CompileCoffeeScript( analysis, options, compiler, output != None )
+        CompileCoffeeScript( analysis, options, compiler, output != None,
+                lastCheckTime)
 
         if output != None:
             if compiler != "cat":
@@ -1438,6 +1477,29 @@ def main():
                 completeList.extend( prepend )
                 completeList.extend( analysis.getFileList() )
                 JoinFiles( completeList, output)
+
+        watchedFiles.extend(analysis.getInputFiles())
+
+    return watchedFiles
+
+def main():
+    options = Options()
+
+    if options.help:
+        print MAN_PAGE;
+        sys.exit(0)
+
+    compiledAt = time.time()
+    watchList = compileProjects(options, 10 ** 20)
+
+    # Loop while watching changes. Carefully handle the case where an input
+    # file is changed while we are compiling, in which case the input file will
+    # be older than the output file even though it has changed.
+    while options.watch:
+        watchFiles(watchList, compiledAt)
+        nextCompiledAt = time.time()
+        watchList = compileProjects(options, compiledAt)
+        compiledAt = nextCompiledAt
 
 # Here is jslint in case they don't have it.
 JSLINT_RHINO = """
