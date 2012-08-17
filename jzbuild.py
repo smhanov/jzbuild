@@ -733,6 +733,10 @@ class Analysis:
         # have been made.
         self.fileList = []
 
+        # If this is non-empty, then an error occurred and compilation cannot
+        # continue.
+        self.errors = []
+
         def processFile( path ):
             """Given the full path to a file, open it and look for includes. For
             each include found, add it to the file list and update the dependency
@@ -946,10 +950,16 @@ def CompileCoffeeScript( analysis, options, compiler, joined, targetTime ):
         if ext == ".coffee":
             destination = path + ".coffee.js"
             anyCoffee = True
+            success = True
             if not os.path.exists(destination) or \
                os.path.getmtime(filename) > min(targetTime, os.path.getmtime(destination)):
-                RunCoffeeScript( filename, destination, closureMode )
-            analysis.replaceFile( filename, destination )
+                success = RunCoffeeScript( filename, destination, closureMode )
+
+            if success:
+                analysis.replaceFile( filename, destination )
+            else:
+                analysis.errors.append("Error in " + filename + 
+                        ": Coffeescript compiler failed")
 
     if anyCoffee:
         analysis.addContentToStart( COFFEESCRIPT_UTILITIES )
@@ -1005,6 +1015,16 @@ def RunCoffeeScript( source, destination, closureMode ):
     process.stdin.write( open( source, "rb" ).read() )
     process.stdin.close()
     process.wait()
+
+    # The compiler silently fails if anything is wrong, leaving a zero-length
+    # file.
+    output.close()
+
+    if os.path.getsize(destination) == 0:
+        os.unlink(destination)
+        return False
+    else:
+        return True
 
 def DownloadExterns():
     """Downloads Closure compiler externs files, if necessary."""
@@ -1467,7 +1487,11 @@ def compileProjects(options, lastCheckTime):
         CompileCoffeeScript( analysis, options, compiler, output != None,
                 lastCheckTime)
 
-        if output != None:
+        if len(analysis.errors):
+            for error in analysis.errors:
+                print error
+
+        elif output != None:
             if compiler != "cat":
                 RunCompiler( compiler, analysis.getFileList(), output, 
                         compilerOptions, prepend, exports)
