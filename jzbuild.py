@@ -190,8 +190,15 @@ JCOFFEESCRIPT_PATH = \
 COFFEESCRIPT_PATH = \
     os.path.join(GetStorageFolder(), os.path.basename( COFFEESCRIPT_URL ) )
 
+COFFEESCRIPT_NODEJS_PATH = \
+    os.path.join(GetStorageFolder(), "coffee-script-node.js" )
+
 VALID_COMPILERS = COMPILERS.keys();
 VALID_COMPILERS.append("cat")
+
+# Path to node js, if found on system. This is used to run coffeescript much
+# faster then java.
+PATH_TO_NODEJS = None
 
 MAN_PAGE = """
 NAME
@@ -214,6 +221,9 @@ DESCRIPTION
 
     Jzbuild will download and use the Coffeescript compiler to seemlessly
     handle files ending in ".coffee".
+
+    If node.js is installed on your non-windows system, jzbuild will use it to
+    compile coffeescript much faster.
 
     [files]
 
@@ -997,34 +1007,89 @@ def DownloadCoffeeScript():
         open(COFFEESCRIPT_PATH, "wb").write( urllib2.urlopen(COFFEESCRIPT_URL).read() )
         HaveCoffeeScript = True
 
+    if not os.path.exists(COFFEESCRIPT_NODEJS_PATH):
+        # This little driver is added to the stock coffeescript to get it to
+        # run from node.js
+        append = """
+            var fs = require('fs')
+            var args = process.argv;
+            var errors = false;
+            var options = {};
+            var files = []; // 0th and every even one is input, odd ones are output.
+            for(var i = 2; i < args.length; i++ ) {
+                // the special options added for jzbuild
+                if (args[i] == "--bare") 
+                    options.bare = true;
+                else if (args[i] == "--noutil") 
+                    options.noutil = true;
+                else if (args[i] == "--closure") 
+                    options.closure = true;
+                else
+                    files.push(args[i])
+            }
+
+            for (i = 0; i < files.length; i += 2 ) {
+                var jsContents= fs.readFileSync(files[i], "utf-8");
+                try {
+                    var coffeeContent = this.CoffeeScript.compile(jsContents,
+                            options);
+                    fs.writeFileSync(files[i+1], coffeeContent, "utf-8");
+                } catch(e) {
+                    process.stderr.write("" + e);
+                    errors = true;
+                }
+            }
+            
+            process.exit(errors ? 1 : 0);
+            """
+
+        coffeescript = file(COFFEESCRIPT_PATH, "rt").read() + append
+        file(COFFEESCRIPT_NODEJS_PATH, "wt").write(coffeescript)
+
 def RunCoffeeScript( source, destination, closureMode ):
     DownloadCoffeeScript()
-    commands = [ "java", "-jar", JCOFFEESCRIPT_PATH, 
-        "--coffeescriptjs", COFFEESCRIPT_PATH ]
 
-    if closureMode:
-        # Add closure annotations
-        commands.extend( ["--bare", "--noutil", "--closure"] )
+    if PATH_TO_NODEJS != None:
+        # Use the fast node.js version
+        commands = [ PATH_TO_NODEJS, COFFEESCRIPT_NODEJS_PATH ]
 
-    print "Compiling %s -> %s" % (source, destination)
+        if closureMode:
+            # Add closure annotations
+            commands.extend( ["--bare", "--noutil", "--closure"] )
 
-    output = open(destination, "wb")
-    process = \
-        subprocess.Popen(commands, stdout=output, stdin=subprocess.PIPE)
+        commands.extend([source, destination])
 
-    process.stdin.write( open( source, "rb" ).read() )
-    process.stdin.close()
-    process.wait()
-
-    # The compiler silently fails if anything is wrong, leaving a zero-length
-    # file.
-    output.close()
-
-    if os.path.getsize(destination) == 0:
-        os.unlink(destination)
-        return False
+        print "Compiling %s -> %s" % (source, destination)
+        return 0 == subprocess.call(commands)
+        
     else:
-        return True
+        # use the slow java version
+        commands = [ "java", "-jar", JCOFFEESCRIPT_PATH, 
+            "--coffeescriptjs", COFFEESCRIPT_PATH ]
+
+        if closureMode:
+            # Add closure annotations
+            commands.extend( ["--bare", "--noutil", "--closure"] )
+
+        print "Compiling %s -> %s" % (source, destination)
+
+        output = open(destination, "wb")
+        process = \
+            subprocess.Popen(commands, stdout=output, stdin=subprocess.PIPE)
+
+        process.stdin.write( open( source, "rb" ).read() )
+        process.stdin.close()
+        process.wait()
+
+        # The compiler silently fails if anything is wrong, leaving a zero-length
+        # file.
+        output.close()
+
+        if os.path.getsize(destination) == 0:
+            os.unlink(destination)
+            return False
+        else:
+            return True
 
 def DownloadExterns():
     """Downloads Closure compiler externs files, if necessary."""
@@ -1198,6 +1263,16 @@ def CheckEnvironment(projects, names):
             print "Java is not installed on this system. Please install " + \
                   "the default-jre or openjdk-6-jre or sun-java6-bin package or equivalent."
             okay = False     
+
+    # check if we have node.js available to run the coffeescript much faster
+    global PATH_TO_NODEJS
+    if not IsWindows:
+        path = os.environ["PATH"].split(":")
+        for folder in path:
+            node = os.path.join(folder, "node")
+            if os.path.isfile( node ):
+                PATH_TO_NODEJS = node
+                break
 
     return okay
 
