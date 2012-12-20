@@ -88,6 +88,9 @@ import atexit
 import base64
 import cStringIO
 import glob
+import gzip
+import httplib
+import json
 import os
 import platform
 import re
@@ -95,6 +98,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import urllib
 import urllib2
 import zipfile
 import zlib
@@ -1160,6 +1164,10 @@ def RunCompiler(type, files, output, compilerOptions, prepend, exports):
 
     outputFile.flush()
 
+    if type == "closure": 
+        if CallClosureService(cmdLine, outputFile, files):
+            return
+
     for cmd in cmdLine:
         print cmd ,
     print
@@ -1175,6 +1183,82 @@ def RunCompiler(type, files, output, compilerOptions, prepend, exports):
         process.wait()
     else:    
         subprocess.call(cmdLine, stdout=outputFile)
+
+def CallClosureService(cmdline, outputFileHandle, filenames):
+
+    print("Sending your code to Google Closure Service...")
+
+    code = []
+    # convert the closure compiler command line to their web api
+    i = 0
+    params = []
+    while i < len(cmdline):
+        arg = cmdline[i]
+        if arg == '--js':
+            #code.append(file(cmdline[i+1], "rt").read())
+            params.append(("js_code", file(cmdline[i+1], "rt").read()))
+            i += 1
+        elif arg == "--externs":
+            params.append(("js_externs", file(cmdline[i+1], "rt").read()))
+        elif arg.startswith("--"):
+            params.append((arg[2:], cmdline[i+1]))
+            i += 1
+
+        i += 1
+
+    params.append(("output_format", "json"))
+    params.append(("output_info", "compiled_code"))
+    params.append(("output_info", "errors"))
+    params.append(("output_info", "warnings"))
+    params.append(("output_info", "statistics"))
+    params = urllib.urlencode(params)
+
+    # Always use the following value for the Content-type header.
+    headers = { "Content-type": "application/x-www-form-urlencoded" }
+    headers["Content-encoding"] = "gzip"
+
+    compressedStream = cStringIO.StringIO()
+    compressor = gzip.GzipFile(mode="w", fileobj=compressedStream)
+    compressor.write(params)
+    compressor.close()
+
+    try:
+        conn = httplib.HTTPConnection('closure-compiler.appspot.com')
+        conn.request('POST', '/compile', compressedStream.getvalue(), headers)
+        response = conn.getresponse()
+        data = response.read()
+        conn.close()
+        js = json.loads(data)
+
+        if "compiledCode" not in js:
+            raise Exception("Invalid response")
+    except:
+        print("Request to closure service failed. Falling back to local compilation.")
+        return False
+    
+    if "warnings" in js:
+        for warning in js["warnings"]:
+            filename = warning["file"]
+            if filename.startswith("Input_"):
+                index = int(filename[6:])
+                filename = filenames[index]
+            print("WARNING: {0}:{1}: {2}".format(filename, warning["lineno"],
+                        warning["warning"]))
+
+    if "errors" in js:
+        for error in js["errors"]:
+            filename = error["file"]
+            if filename.startswith("Input_"):
+                index = int(filename[6:])
+                filename = filenames[index]
+            print("WARNING: {0}:{1}: {2}".format(filename, error["lineno"],
+                        error["error"]))
+
+    if "compiledCode" in js:
+        outputFileHandle.write(js["compiledCode"])
+
+        
+    return True
 
 def JoinFiles( files, outputFile ):    
     """Concatenates the contents of the given files and writes the output to
