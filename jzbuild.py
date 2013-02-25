@@ -1103,7 +1103,8 @@ def DownloadExterns():
             print "Fetching %s" % url
             file(path,"wb").write(urllib2.urlopen(url).read())
 
-def RunCompiler(type, files, output, compilerOptions, prepend, exports):
+def RunCompiler(type, files, output, compilerOptions, prepend, exports,
+        useEnclosure = True):
     """Downloads and runs the compiler of the given type.
 
        type is a key to the compiler information in the global map COMPILERS
@@ -1118,6 +1119,9 @@ def RunCompiler(type, files, output, compilerOptions, prepend, exports):
 
        exports is extra code added to the end as input to the compiler and is
        intended to export names to the closure compiler.
+
+       if useEnclosure is True, then the entire thing except for prepended file
+       is surrounded with (function(){...}());
        """
     compiler = COMPILERS[type]
     compilerFileName = os.path.join( GetStorageFolder(), 
@@ -1162,10 +1166,13 @@ def RunCompiler(type, files, output, compilerOptions, prepend, exports):
         print "Prepending %s" % f
         outputFile.write(file(f, "rb").read())
 
+    if useEnclosure: outputFile.write("(function(){\n");
+
     outputFile.flush()
 
     if type == "closure": 
         if CallClosureService(cmdLine, outputFile, files):
+            if useEnclosure: outputFile.write("\n}());\n");
             return
 
     for cmd in cmdLine:
@@ -1183,6 +1190,8 @@ def RunCompiler(type, files, output, compilerOptions, prepend, exports):
         process.wait()
     else:    
         subprocess.call(cmdLine, stdout=outputFile)
+
+    if useEnclosure: outputFile.write("\n}());\n");
 
 def CallClosureService(cmdline, outputFileHandle, filenames):
 
@@ -1260,14 +1269,16 @@ def CallClosureService(cmdline, outputFileHandle, filenames):
         
     return True
 
-def JoinFiles( files, outputFile ):    
+def JoinFiles( files, outputFile, useEnclosure = True ):    
     """Concatenates the contents of the given files and writes the output to
     the outputFile.
     """
     sys.stderr.write("Joining " + " ".join(files) + "\n" )
     output = file(outputFile, "wb")
+    if useEnclosure: output.write("(function(){\n")
     for inputName in files:
         output.write(file(inputName, "rb").read())
+    if useEnclosure: output.write("}());")
 
 def GetKey( projects, name, key, makeArray=False ):
     """Returns the key of the project, following any bases"""
