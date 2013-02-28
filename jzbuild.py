@@ -1172,7 +1172,7 @@ def RunCompiler(type, files, output, compilerOptions, prepend, exports,
 
     if type == "closure": 
         if CallClosureService(cmdLine, outputFile, files):
-            if useEnclosure: outputFile.write("\n}());\n");
+            if useEnclosure: outputFile.write("\n})();\n");
             return
 
     for cmd in cmdLine:
@@ -1191,7 +1191,7 @@ def RunCompiler(type, files, output, compilerOptions, prepend, exports,
     else:    
         subprocess.call(cmdLine, stdout=outputFile)
 
-    if useEnclosure: outputFile.write("\n}());\n");
+    if useEnclosure: outputFile.write("\n})();\n");
 
 def CallClosureService(cmdline, outputFileHandle, filenames):
 
