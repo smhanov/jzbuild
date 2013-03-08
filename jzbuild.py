@@ -1166,7 +1166,7 @@ def RunCompiler(type, files, output, compilerOptions, prepend, exports,
         print "Prepending %s" % f
         outputFile.write(file(f, "rb").read())
 
-    if useEnclosure: outputFile.write("(function(){\n");
+    if useEnclosure: outputFile.write("(function(){\n\"use strict\";");
 
     outputFile.flush()
 
@@ -1275,7 +1275,7 @@ def JoinFiles( files, outputFile, useEnclosure = True ):
     """
     sys.stderr.write("Joining " + " ".join(files) + "\n" )
     output = file(outputFile, "wb")
-    if useEnclosure: output.write("(function(){\n")
+    if useEnclosure: output.write("(function(){\n    \"use strict\";\n")
     for inputName in files:
         output.write(file(inputName, "rb").read())
     if useEnclosure: output.write("}());")
