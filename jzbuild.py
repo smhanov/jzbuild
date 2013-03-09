@@ -188,6 +188,8 @@ def GetStorageFolder():
         os.mkdir(path)
     return path 
 
+JAVA_PATH='java'
+
 JCOFFEESCRIPT_PATH = \
     os.path.join(GetStorageFolder(), os.path.basename( JCOFFEESCRIPT_URL ) )
 
@@ -1068,13 +1070,14 @@ def RunCoffeeScript( source, destination, closureMode ):
         
     else:
         # use the slow java version
-        commands = [ "java", "-jar", JCOFFEESCRIPT_PATH, 
+        commands = [ JAVA_PATH, "-jar", JCOFFEESCRIPT_PATH, 
             "--coffeescriptjs", COFFEESCRIPT_PATH ]
 
         if closureMode:
             # Add closure annotations
             commands.extend( ["--bare", "--noutil", "--closure"] )
 
+        commands.extend([source, destination])
         print "Compiling %s -> %s" % (source, destination)
 
         output = open(destination, "wb")
@@ -1136,7 +1139,7 @@ def RunCompiler(type, files, output, compilerOptions, prepend, exports,
 
     print "Running %s compiler." % type
 
-    cmdLine = [ "java", "-jar", compilerFileName ]
+    cmdLine = [ JAVA_PATH, "-jar", compilerFileName ]
     cmdLine.extend( compilerOptions )
     if "requiredOptions" in compiler:
         cmdLine.extend( compiler["requiredOptions"] )
@@ -1322,7 +1325,7 @@ def CheckEnvironment(projects, names):
     required files.
     """
     okay = True
-    needJava = False
+    needJava = True # Need java for coffeescript
     haveJava = False
     haveRhino = False
     needRhino = not IsWindows
@@ -1335,6 +1338,7 @@ def CheckEnvironment(projects, names):
         if compiler == "closure": needJava = True
 
     if IsWindows:
+        global JAVA_PATH
         # We need java to run. Search the path for it.
         path = os.environ["PATH"].split(";")
         if needJava:
@@ -1342,7 +1346,17 @@ def CheckEnvironment(projects, names):
                 java = os.path.join(folder, "java.exe")
                 if os.path.isfile( java ):
                     haveJava = True
+                    JAVA_PATH=java
                     break
+                # Handle Windows System File Redirection when
+                # running 32-bit python on 64-bit Windows
+                if java.find("system32") != -1:
+                    java = java.replace("system32", "SysWOW64")
+                    java = java.replace("System32", "SysWOW64")
+                    if os.path.isfile( java ):
+                        haveJava = True
+                        JAVA_PATH=java
+                        break
 
             if not haveJava:
                 print "Cannot find Java. Please install it from www.java.com."
@@ -1520,7 +1534,7 @@ class Options:
 
             if not haveRhino:
                 InstallRhino(rhino)
-                self.rhinoCmd = ["java", "-jar", rhino]    
+                self.rhinoCmd = [JAVA_PATH, "-jar", rhino]    
 
 def watchFiles(fileList, timestamp):
     """
