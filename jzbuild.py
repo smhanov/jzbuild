@@ -951,7 +951,7 @@ def CompileCoffeeScript( analysis, options, compiler, joined, targetTime ):
             anyCoffee = True
             success = True
             if not os.path.exists(destination) or \
-               os.path.getmtime(filename) > min(targetTime, os.path.getmtime(destination)):
+               os.path.getmtime(filename) > os.path.getmtime(destination):
                 success = RunCoffeeScript( filename, destination, closureMode )
 
             if success:
