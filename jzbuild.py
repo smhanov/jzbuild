@@ -679,6 +679,8 @@ class DependencyGraph:
 
         L = []
         S = [n for n in self.nodes.values() if len(n.parents) == 0]        
+        # sorting them preserves the order as much as possible.
+        S.sort(key = lambda a: a.index, reverse=True)
 
         while len(S) > 0:
             n = S.pop()
@@ -695,18 +697,22 @@ class DependencyGraph:
         if data in self.nodes:
             return self.nodes[data]
 
-        self.nodes[data] = self.__DependencyNode( data )
+        self.nodes[data] = self.__DependencyNode( data, len(self.nodes) )
         return self.nodes[data]
 
     class __DependencyNode:
         """ Represents a node in the dependency graph. This class is used
         internally in the dependency graph. """
 
-        def __init__(self, data):
+        def __init__(self, data, index):
 
             self.data = data
             self.parents = []
             self.children = []
+            self.index = index
+
+        def __repr__(self):
+            return str(self.index)
 
 class Analysis:
     """
@@ -730,10 +736,10 @@ class Analysis:
         self.exports = []
 
         includeRe_js = re.compile(r"""\/\/#include\s+[<"]([^>"]+)[>"]""")
-        exportRe_js = re.compile(r"""\/\/\@export ([A-Za-z_\$][A-Za-z_0-9\.\$]*)""")
+        exportRe_js = re.compile(r"""@export ([A-Za-z_\$][A-Za-z_0-9\.\$]*)""")
 
         includeRe_coffee = re.compile(r"""#include\s+[<"]([^>"]+)[>"]""")
-        exportRe_coffee = re.compile(r"""#@export ([A-Za-z_\$][A-Za-z_0-9\.\$]*)""")
+        exportRe_coffee = re.compile(r"""@export ([A-Za-z_\$][A-Za-z_0-9\.\$]*)""")
 
         self.vpath = vpath
 
@@ -775,7 +781,7 @@ class Analysis:
                 if m:
                     self.exports.append( m.group(1) )
 
-                m = includeRe.match( line )
+                m = includeRe.search( line )
                 if not m: continue
 
                 includedPath = self.__findFile( m.group(1) )
@@ -1255,7 +1261,7 @@ def CallClosureService(cmdline, outputFileHandle, filenames):
         
     return True
 
-def JoinFiles( files, outputFile, useEnclosure = True ):    
+def JoinFiles( files, outputFile, useEnclosure, exports ):    
     """Concatenates the contents of the given files and writes the output to
     the outputFile.
     """
@@ -1264,7 +1270,9 @@ def JoinFiles( files, outputFile, useEnclosure = True ):
     if useEnclosure: output.write("(function(){\n    \"use strict\";\n")
     for inputName in files:
         output.write(file(inputName, "rb").read())
-    if useEnclosure: output.write("}());")
+    if useEnclosure: 
+        output.write(exports)
+        output.write("}());")
 
 def GetKey( projects, name, key, makeArray=False ):
     """Returns the key of the project, following any bases"""
@@ -1637,10 +1645,7 @@ def compileProjects(options, lastCheckTime):
         # Also process prepended files
         prependedFiles = Analysis( prepend, include ).getFileList()
 
-        if compiler == 'closure':
-            exports = analysis.getExports()
-        else:
-            exports = ""
+        exports = analysis.getExports()
 
         # Get the file time of the output file, if it exists.
         targetTime = lastCheckTime
@@ -1669,7 +1674,7 @@ def compileProjects(options, lastCheckTime):
                 completeList = []
                 completeList.extend( prepend )
                 completeList.extend( analysis.getFileList() )
-                JoinFiles( completeList, output)
+                JoinFiles( completeList, output, True, exports)
 
         watchedFiles.extend(analysis.getInputFiles())
 
