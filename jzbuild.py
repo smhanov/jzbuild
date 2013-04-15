@@ -354,6 +354,7 @@ MAKEFILE FORMAT
     ",".join(VALID_COMPILERS)).replace("MAKEFILE_JZ", MAKEFILE_NAME)
 
 # Make these variables global, and set them later.
+RHINO_CMD = ""    
 JSLINT_RHINO = ""
 CLOSURE_EXTERNS = ""
 
@@ -919,7 +920,7 @@ def RunJsLint(files, targetTime, options):
     # run the JSlint-rhino file on any files which are newer than the
     # target.        
     cmd = []
-    cmd.extend(options.rhinoCmd)
+    cmd.extend(RHINO_CMD)
     cmd.append( jslint )
 
     for f in files:
@@ -1374,6 +1375,23 @@ def CheckEnvironment(projects, names):
                 PATH_TO_NODEJS = node
                 break
 
+    # We need rhino.
+    haveRhino = False
+    global RHINO_CMD
+    for folder in os.environ["PATH"].split(":"):
+        rhino = os.path.join(folder, "rhino")
+        if os.path.isfile( rhino ):
+            haveRhino = True
+            RHINO_CMD = [rhino]
+            break
+
+    if not haveRhino:
+        rhino = os.path.join(GetStorageFolder(), "rhino.jar")
+
+    if not haveRhino:
+        InstallRhino(rhino)
+        RHINO_CMD = [JAVA_PATH, "-jar", rhino]    
+
     return okay
 
 def CreateProjects(options):
@@ -1510,21 +1528,6 @@ class Options:
             self.input = self.names
             self.names = []
 
-        # We need rhino.
-        haveRhino = False
-        for folder in os.environ["PATH"].split(":"):
-            rhino = os.path.join(folder, "rhino")
-            if os.path.isfile( rhino ):
-                haveRhino = True
-                self.rhinoCmd = [rhino]
-                break
-
-        if not haveRhino:
-            rhino = os.path.join(GetStorageFolder(), "rhino.jar")
-
-        if not haveRhino:
-            InstallRhino(rhino)
-            self.rhinoCmd = [JAVA_PATH, "-jar", rhino]    
 
 def watchFiles(fileList, timestamp):
     """
