@@ -1262,14 +1262,16 @@ def CallClosureService(cmdline, outputFileHandle, filenames):
         
     return True
 
-def JoinFiles( files, outputFile, useEnclosure, exports ):    
+def JoinFiles( prepended, sources, outputFile, useEnclosure, exports ):    
     """Concatenates the contents of the given files and writes the output to
     the outputFile.
     """
-    sys.stderr.write("Joining " + " ".join(files) + "\n" )
+    sys.stderr.write("Joining " + " ".join(sources) + "\n" )
     output = file(outputFile, "wb")
+    for inputName in prepended:
+        output.write(file(inputName, "rb").read())
     if useEnclosure: output.write("(function(){\n    \"use strict\";\n")
-    for inputName in files:
+    for inputName in sources:
         output.write(file(inputName, "rb").read())
     if useEnclosure: 
         output.write(exports)
@@ -1674,10 +1676,8 @@ def compileProjects(options, lastCheckTime):
                         compilerOptions, prepend, exports)
             else:
                 print "Creating %s" % output
-                completeList = []
-                completeList.extend( prepend )
-                completeList.extend( analysis.getFileList() )
-                JoinFiles( completeList, output, True, exports)
+                JoinFiles( prepend, analysis.getFileList(), output, True,
+                        exports)
 
         watchedFiles.extend(analysis.getInputFiles())
 
