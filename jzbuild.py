@@ -266,6 +266,11 @@ DESCRIPTION
         present. Valid options are VALID_COMPILERS. If you do not have the
         given compiler, it will be downloaded.
 
+    --cloud
+        
+        If specified, then the Google closure compiler service is used. Your 
+        code will be sent over the internet to be compiled.
+
     --release
         
         Specifies that we should use a advanced compilation options, such 
@@ -1097,7 +1102,7 @@ def DownloadExterns():
             file(path,"wb").write(urllib2.urlopen(url).read())
 
 def RunCompiler(type, files, output, compilerOptions, prepend, exports,
-        useEnclosure = True):
+        useEnclosure, options):
     """Downloads and runs the compiler of the given type.
 
        type is a key to the compiler information in the global map COMPILERS
@@ -1163,7 +1168,7 @@ def RunCompiler(type, files, output, compilerOptions, prepend, exports,
 
     outputFile.flush()
 
-    if type == "closure": 
+    if type == "closure" and options.cloud: 
         if CallClosureService(cmdLine, outputFile, files):
             if useEnclosure: outputFile.write("\n})();\n");
             return
@@ -1455,6 +1460,7 @@ class Options:
         self.compiler = 'cat'
         self.release = False
         self.watch = False
+        self.cloud = False
         
         i = 1
         args = sys.argv;
@@ -1501,6 +1507,9 @@ class Options:
 
             elif args[i] == '--release':
                 self.release = True
+
+            elif args[i] == '--cloud':
+                self.cloud = True
 
             elif args[i] == '--watch':
                 self.watch = True
@@ -1673,7 +1682,7 @@ def compileProjects(options, lastCheckTime):
         elif output != None:
             if compiler != "cat":
                 RunCompiler( compiler, analysis.getFileList(), output, 
-                        compilerOptions, prepend, exports)
+                        compilerOptions, prepend, exports, True, options)
             else:
                 print "Creating %s" % output
                 JoinFiles( prepend, analysis.getFileList(), output, True,
