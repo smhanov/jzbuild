@@ -1036,7 +1036,7 @@ def DownloadCoffeeScript():
                             options);
                     fs.writeFileSync(files[i+1], coffeeContent, "utf-8");
                 } catch(e) {
-                    process.stderr.write("" + e);
+                    process.stderr.write("" + e + "\\n");
                     errors = true;
                 }
             }
