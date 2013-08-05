@@ -1240,6 +1240,7 @@ def CallClosureService(cmdline, outputFileHandle, filenames):
         if "compiledCode" not in js:
             raise Exception("Invalid response")
     except:
+        print("Unexpected error:", sys.exc_info()[0])
         print("Request to closure service failed. Falling back to local compilation.")
         return False
     
@@ -1258,7 +1259,7 @@ def CallClosureService(cmdline, outputFileHandle, filenames):
             if filename.startswith("Input_"):
                 index = int(filename[6:])
                 filename = filenames[index]
-            print("WARNING: {0}:{1}: {2}".format(filename, error["lineno"],
+            print("ERROR: {0}:{1}: {2}".format(filename, error["lineno"],
                         error["error"]))
 
     if "compiledCode" in js:
