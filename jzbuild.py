@@ -117,7 +117,7 @@ COMPILERS = {
     "closure": {
         # URL at which to download a zipfile of the compiler
         "download":
-            "http://closure-compiler.googlecode.com/files/compiler-latest.zip",
+            "http://dl.google.com/closure-compiler/compiler-latest.zip",
 
         # full path in the zip file of the compiler.
         "filename":
