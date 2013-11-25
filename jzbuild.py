@@ -733,6 +733,9 @@ class Analysis:
     def __init__(self, fileListIn, vpath):
         graph = DependencyGraph()
 
+        # Are we missing any files that were included?
+        self._isMissingFiles = False
+
         # Set of fully qualified paths that we have already processed.
         filesProcessed = {}
 
@@ -799,6 +802,7 @@ class Analysis:
                 else:
                     print 'Error: Could not find file "%s" included from "%s"' % \
                         (m.group(1), path )
+                    self._isMissingFiles = True
 
         # Augment each file passed in with full path information.
         for name in fileListIn:
@@ -901,6 +905,9 @@ class Analysis:
 
     def getInputFilesEndingWith( self, extension ):
         return filter( lambda f: f.endswith( extension), self.fileList )
+
+    def isMissingFiles(self):
+        return self._isMissingFiles
 
 
 def RunJsLint(files, targetTime, options):
@@ -1558,7 +1565,7 @@ def compileProjects(options, lastCheckTime):
     """
         Compile all projects, using the given options.
         Returns the complete list of input files, suitable for watching
-        changes.
+        changes. Also returns whether any files were missing
 
         Requires the time that the input files were last checked for changes (0
         for never)
@@ -1588,6 +1595,8 @@ def compileProjects(options, lastCheckTime):
 
     if not CheckEnvironment(projects, options.names):
         sys.exit(-1)
+
+    wereFilesMissing = False
 
     # Look for Makefile.json in current folder. For each process,
     for name in options.names:
@@ -1689,9 +1698,10 @@ def compileProjects(options, lastCheckTime):
                 JoinFiles( prepend, analysis.getFileList(), output, True,
                         exports)
 
+        wereFilesMissing = wereFilesMissing or analysis.isMissingFiles()
         watchedFiles.extend(analysis.getInputFiles())
 
-    return watchedFiles
+    return watchedFiles, wereFilesMissing
 
 def main():
     options = Options()
@@ -1701,7 +1711,7 @@ def main():
         sys.exit(0)
 
     compiledAt = time.time()
-    watchList = compileProjects(options, 0)
+    watchList, wereFilesMissing = compileProjects(options, 0)
 
     # Loop while watching changes. Carefully handle the case where an input
     # file is changed while we are compiling, in which case the input file will
@@ -1709,8 +1719,14 @@ def main():
     while options.watch:
         watchFiles(watchList, compiledAt)
         nextCompiledAt = time.time()
-        watchList = compileProjects(options, compiledAt)
+        newWatchList, wereFilesMissing = compileProjects(options, compiledAt)
         compiledAt = nextCompiledAt
+        if not wereFilesMissing:
+            # if any files in the include list could not be found, then don't
+            # update the watch list because then it wouldn't be complete.
+            watchList = newWatchList
+        else:
+            print "Some files were missing. Not updating watch list."
 
 # Here is jslint in case they don't have it.
 JSLINT_RHINO = """
