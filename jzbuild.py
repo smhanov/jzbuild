@@ -168,8 +168,6 @@ COMPILERS = {
 EXTERNS = {
     "jquery-1.5.js":
         "http://closure-compiler.googlecode.com/svn/trunk/contrib/externs/jquery-1.5.js",
-    "json.js":
-        "http://closure-compiler.googlecode.com/svn/trunk/contrib/externs/json.js",
     "jquery-mobile.js":
         "http://github.com/smhanov/jzbuild/raw/master/externs/jquery-mobile.js",
 }
