@@ -84,22 +84,33 @@ JCoffeeScript is covered under the following license:
  */
 """
 
+import sys
+if sys.version_info < (3, 0):
+    import urllib
+    import urllib2
+    import httplib
+else:
+    # for python 3, make the adaptations here and then code as if
+    # we are in python 2.7
+    import http.client as httplib
+    import urllib.request as urllib2
+    import urllib.parse as urllib_parse
+
+    class urllib: pass
+    urllib.urlencode = urllib_parse.urlencode
 import atexit
 import base64
-import cStringIO
 import glob
 import gzip
-import httplib
+import io
 import json
 import os
 import platform
 import re
 import subprocess
-import sys
-import tempfile
 import time
-import urllib
-import urllib2
+import tempfile
+import sys
 import zipfile
 import zlib
 
@@ -182,7 +193,7 @@ def GetStorageFolder():
     # Seems to work on windows 7 too   
     path = os.path.join(os.path.expanduser("~"), ".jzbuild")
     if not os.path.isdir(path):
-        print "Creating %s" % path
+        print("Creating %s" % path)
         os.mkdir(path)
     return path 
 
@@ -197,7 +208,7 @@ COFFEESCRIPT_PATH = \
 COFFEESCRIPT_NODEJS_PATH = \
     os.path.join(GetStorageFolder(), "coffee-script-node.js" )
 
-VALID_COMPILERS = COMPILERS.keys();
+VALID_COMPILERS = list(COMPILERS.keys());
 VALID_COMPILERS.append("cat")
 
 # Path to node js, if found on system. This is used to run coffeescript much
@@ -798,8 +809,8 @@ class Analysis:
                         filesToProcess.append( includedPath )
                     graph.addDependency( path, includedPath )
                 else:
-                    print 'Error: Could not find file "%s" included from "%s"' % \
-                        (m.group(1), path )
+                    print('Error: Could not find file "%s" included from "%s"' % \
+                        (m.group(1), path ))
                     self._isMissingFiles = True
 
         # Augment each file passed in with full path information.
@@ -808,7 +819,7 @@ class Analysis:
             if path:
                 filesToProcess.append( path )
             else:
-                print "File not found: " + name
+                print("File not found: " + name)
 
         # while the file list is not empty, remove and process a file.
         while len( filesToProcess ):
@@ -844,7 +855,7 @@ class Analysis:
             if path != none:
                 files.append( path )
             else:
-                print "File not found: %s" % name
+                print("File not found: {0}".format(name))
 
         files.extend( self.fileList )
         self.fileList = files
@@ -922,8 +933,8 @@ def RunJsLint(files, targetTime, options):
     # Create the jslint-rhino file if it does not exist.
     jslint = os.path.join( storagePath, "jslint-rhino.js" );
     if not os.path.exists( jslint ):
-        print "%s not found. Creating." % jslint
-        f = file(jslint, "wb")
+        print("%s not found. Creating." % jslint)
+        f = open(jslint, "wb")
         f.write(zlib.decompress(base64.b64decode(JSLINT_RHINO)))
         f.close()
 
@@ -987,18 +998,18 @@ def DownloadProgram(url, fileInZip, outputPath):
        If the target file already exists it does nothing."""
 
     if not os.path.exists( outputPath ):
-        print "%s not found! Downloading from %s" % (outputPath, url)
+        print("%s not found! Downloading from %s" % (outputPath, url))
 
         url = urllib2.urlopen( url )
-        dataFile = ""    
+        dataFile = bytes()
         while 1:
             data = url.read( 1024 )
-            if data == "": break
+            if len(data) == 0: break
             dataFile += data
-            print "Read %d bytes\r" % len(dataFile),
+            sys.stdout.write("Read %d bytes\r" % len(dataFile))
 
-        zip = zipfile.ZipFile( cStringIO.StringIO( dataFile ), "r" )    
-        file(outputPath, "wb").write(zip.read(fileInZip))
+        zip = zipfile.ZipFile( io.BytesIO( dataFile ), "r" )    
+        open(outputPath, "wb").write(zip.read(fileInZip))
 
     return True    
 
@@ -1007,9 +1018,9 @@ HaveCoffeeScript = os.path.exists( JCOFFEESCRIPT_PATH )
 def DownloadCoffeeScript():
     global HaveCoffeeScript
     if not HaveCoffeeScript:
-        print "Downloading JCoffeescript..."
+        print("Downloading JCoffeescript...")
         open(JCOFFEESCRIPT_PATH, "wb").write( urllib2.urlopen(JCOFFEESCRIPT_URL).read() )
-        print COFFEESCRIPT_URL
+        print(COFFEESCRIPT_URL)
         open(COFFEESCRIPT_PATH, "wb").write( urllib2.urlopen(COFFEESCRIPT_URL).read() )
         HaveCoffeeScript = True
 
@@ -1049,8 +1060,8 @@ def DownloadCoffeeScript():
             process.exit(errors ? 1 : 0);
             """
 
-        coffeescript = file(COFFEESCRIPT_PATH, "rt").read() + append
-        file(COFFEESCRIPT_NODEJS_PATH, "wt").write(coffeescript)
+        coffeescript = open(COFFEESCRIPT_PATH, "r").read() + append
+        open(COFFEESCRIPT_NODEJS_PATH, "w").write(coffeescript)
 
 def RunCoffeeScript( source, destination, closureMode ):
     DownloadCoffeeScript()
@@ -1065,7 +1076,7 @@ def RunCoffeeScript( source, destination, closureMode ):
 
         commands.extend([source, destination])
 
-        print "Compiling %s -> %s" % (source, destination)
+        print("Compiling %s -> %s" % (source, destination))
         return 0 == subprocess.call(commands)
         
     else:
@@ -1078,7 +1089,7 @@ def RunCoffeeScript( source, destination, closureMode ):
             commands.extend( ["--bare", "--noutil", "--closure"] )
 
         commands.extend([source, destination])
-        print "Compiling %s -> %s" % (source, destination)
+        print("Compiling %s -> %s" % (source, destination))
 
         output = open(destination, "wb")
         process = \
@@ -1100,11 +1111,11 @@ def RunCoffeeScript( source, destination, closureMode ):
 
 def DownloadExterns():
     """Downloads Closure compiler externs files, if necessary."""
-    for (extern,url) in EXTERNS.iteritems():
+    for (extern,url) in EXTERNS.items():
         path = os.path.join( GetStorageFolder(), extern )
         if not os.path.exists( path ):
-            print "Fetching %s" % url
-            file(path,"wb").write(urllib2.urlopen(url).read())
+            print("Fetching %s" % url)
+            open(path,"wb").write(urllib2.urlopen(url).read())
 
 def RunCompiler(type, files, output, compilerOptions, prepend, exports,
         useEnclosure, options):
@@ -1137,7 +1148,7 @@ def RunCompiler(type, files, output, compilerOptions, prepend, exports,
     DownloadProgram( compiler["download"], compiler["filename"],
             compilerFileName )
 
-    print "Running %s compiler." % type
+    print("Running %s compiler." % type)
 
     cmdLine = [ JAVA_PATH, "-jar", compilerFileName ]
     cmdLine.extend( compilerOptions )
@@ -1160,14 +1171,14 @@ def RunCompiler(type, files, output, compilerOptions, prepend, exports,
         exportFile = tempfile.NamedTemporaryFile(suffix=".js", delete=False)
         TemporaryFiles.append( exportFile )
         exportFileName = exportFile.name
-        exportFile.write(exports)
+        exportFile.write(exports.encode())
         exportFile.flush()
         cmdLine.extend([ "--js", exportFileName])
 
-    outputFile = file(output, "w")
+    outputFile = open(output, "w")
     for f in prepend:
-        print "Prepending %s" % f
-        outputFile.write(file(f, "rb").read())
+        print("Prepending %s" % f)
+        outputFile.write(open(f, "r").read())
 
     if useEnclosure: outputFile.write("(function(){\n\"use strict\";");
 
@@ -1178,16 +1189,14 @@ def RunCompiler(type, files, output, compilerOptions, prepend, exports,
             if useEnclosure: outputFile.write("\n})();\n");
             return
 
-    for cmd in cmdLine:
-        print cmd ,
-    print
+    print(" ".join(cmdLine))
 
     if needsStdin:
         process = \
             subprocess.Popen(cmdLine, stdout=outputFile, stdin=subprocess.PIPE)
 
         for f in files:
-            print "   Reading %s" % f
+            print("   Reading %s" % f)
             process.stdin.write( open( f, "rb" ).read() )
         process.stdin.close()
         process.wait()
@@ -1207,11 +1216,10 @@ def CallClosureService(cmdline, outputFileHandle, filenames):
     while i < len(cmdline):
         arg = cmdline[i]
         if arg == '--js':
-            #code.append(file(cmdline[i+1], "rt").read())
-            params.append(("js_code", file(cmdline[i+1], "rt").read()))
+            params.append(("js_code", open(cmdline[i+1], "r").read()))
             i += 1
         elif arg == "--externs":
-            params.append(("js_externs", file(cmdline[i+1], "rt").read()))
+            params.append(("js_externs", open(cmdline[i+1], "r").read()))
         elif arg.startswith("--"):
             params.append((arg[2:], cmdline[i+1]))
             i += 1
@@ -1229,9 +1237,9 @@ def CallClosureService(cmdline, outputFileHandle, filenames):
     headers = { "Content-type": "application/x-www-form-urlencoded" }
     headers["Content-encoding"] = "gzip"
 
-    compressedStream = cStringIO.StringIO()
-    compressor = gzip.GzipFile(mode="w", fileobj=compressedStream)
-    compressor.write(params)
+    compressedStream = io.BytesIO()
+    compressor = gzip.GzipFile(mode="wb", fileobj=compressedStream)
+    compressor.write(params.encode())
     compressor.close()
 
     try:
@@ -1240,7 +1248,7 @@ def CallClosureService(cmdline, outputFileHandle, filenames):
         response = conn.getresponse()
         data = response.read()
         conn.close()
-        js = json.loads(data)
+        js = json.loads(data.decode())
 
         if "compiledCode" not in js:
             raise Exception("Invalid response")
@@ -1278,12 +1286,12 @@ def JoinFiles( prepended, sources, outputFile, useEnclosure, exports ):
     the outputFile.
     """
     sys.stderr.write("Joining " + " ".join(sources) + "\n" )
-    output = file(outputFile, "wb")
+    output = open(outputFile, "w")
     for inputName in prepended:
-        output.write(file(inputName, "rb").read())
+        output.write(open(inputName, "r").read())
     if useEnclosure: output.write("(function(){\n    \"use strict\";\n")
     for inputName in sources:
-        output.write(file(inputName, "rb").read())
+        output.write(open(inputName, "r").read())
     if useEnclosure: 
         output.write(exports)
         output.write("}());")
@@ -1364,7 +1372,7 @@ def CheckEnvironment(projects, names):
                         break
 
             if not haveJava:
-                print "Cannot find Java. Please install it from www.java.com."
+                print("Cannot find Java. Please install it from www.java.com.")
                 os.system("start http://www.java.com")
                 okay = False
     elif needJava:
@@ -1374,8 +1382,8 @@ def CheckEnvironment(projects, names):
             if os.path.isfile( java ):
                 break
         else:
-            print "Java is not installed on this system. Please install " + \
-                  "the default-jre or openjdk-6-jre or sun-java6-bin package or equivalent."
+            print("Java is not installed on this system. Please install " + \
+                  "the default-jre or openjdk-7-jre or sun-java7-bin package or equivalent.")
             okay = False     
 
     # check if we have node.js available to run the coffeescript much faster
@@ -1419,10 +1427,10 @@ def CreateProjects(options):
     for infile in input:
         list = glob.glob(infile)
         if len(list) == 0:
-            print "Error: Could not find '%s'" % infile
+            print("Error: Could not find '%s'" % infile)
         for file in list:
             if file in NEVER_CHECK_THESE_FILES:
-                print "Ignoring library file '%s'" % file
+                print("Ignoring library file '%s'" % file)
             elif options.output != file:
                 files.append( file )
 
@@ -1477,7 +1485,7 @@ class Options:
                 self.help = True
             elif args[i] == '--out':
                 if i == len(args)-1:
-                    print "Error: --out requires an argument."
+                    print("Error: --out requires an argument.")
                     sys.exit(-1)
                 else:
                     self.output = args[i + 1];
@@ -1485,7 +1493,7 @@ class Options:
 
             elif args[i] == '-f':
                 if i == len(args)-1:
-                    print "Error: --f requires an argument."
+                    print("Error: --f requires an argument.")
                     sys.exit(-1)
                 else:
                     self.makefile = args[i + 1];
@@ -1493,7 +1501,7 @@ class Options:
 
             elif args[i] == '--prepend':
                 if i == len(args)-1:
-                    print "Error: --prepend requires an argument."
+                    print("Error: --prepend requires an argument.")
                     sys.exit(-1)
                 else:
                     self.prepend.append( args[i + 1] );
@@ -1501,11 +1509,11 @@ class Options:
 
             elif args[i] == '--compiler':
                 if i == len(args)-1:
-                    print "Error: --compiler requires an argument."
+                    print("Error: --compiler requires an argument.")
                     sys.exit(-1)
                 elif args[i+1] not in VALID_COMPILERS:
-                    print "Error: --compiler must be one of %s" % (
-                        ",".join(VALID_COMPILERS) )
+                    print("Error: --compiler must be one of %s" % (
+                        ",".join(VALID_COMPILERS) ))
                     sys.exit(-1)
                 else:        
                     self.compiler = args[ i + 1]
@@ -1532,7 +1540,7 @@ class Options:
                         self.compiler = args[i][2:]
                         break
                 else:
-                    print "Error: Unknown option %s" % (args[i])
+                    print("Error: Unknown option %s" % (args[i]))
                     sys.exit(-1)
 
             else:
@@ -1573,22 +1581,23 @@ def compileProjects(options, lastCheckTime):
     # Parse the json
     if not os.path.exists( options.makefile ) or options.output != None:
         if not os.path.exists( options.makefile ):
-            print "Could not find %s. Running jslint on input files." % options.makefile 
+            print("Could not find %s. Running jslint on input files." %
+                    options.makefile)
         projects = CreateProjects(options)
     else:    
-        projects = ParseLazyJson(file(options.makefile, "rb").read())
+        projects = ParseLazyJson(open(options.makefile, "r").read())
 
     if len(options.names) == 0:
         if len(projects) == 1:
             options.names = projects.keys()
         else:
-            print "Please specify a project to load. Valid projects are:"
-            print " ".join(projects.keys())
+            print("Please specify a project to load. Valid projects are:")
+            print(" ".join(projects.keys()))
 
     for name in options.names:
         if name not in projects:
-            print "Error: Cannot find project '%s'" % (
-                name )
+            print("Error: Cannot find project '%s'" % (
+                name ))
             sys.exit(-1)    
 
     if not CheckEnvironment(projects, options.names):
@@ -1602,25 +1611,25 @@ def compileProjects(options, lastCheckTime):
             project = name
 
         if options.clean:
-            print "Cleaning %s..." % ( name )
+            print("Cleaning %s..." % ( name ))
         else:    
-            print "Building %s..." % ( name )
+            print("Building %s..." % ( name ))
 
         output = GetKey( projects, name, "output" )
         if output == None:
-            print "Warning: project %s missing output file. We will only run jslint." % (
-                name )
+            print("Warning: project %s missing output file. We will only run jslint." % (
+                name ))
 
         compiler = GetKey( projects, name, "compiler" )
         if compiler not in VALID_COMPILERS:
             if output != None:
-                print "Warning: Project missing 'compiler' option. Using 'cat'"
+                print("Warning: Project missing 'compiler' option. Using 'cat'")
             compiler = 'cat'
 
         input = GetKey( projects, name, "input", True )
         if input == None:
-            print "Warning: project %s missing input file. skipping." % (
-                name )
+            print("Warning: project %s missing input file. skipping." % (
+                name ))
             continue
 
         compilerOptions = GetKey( projects, name, "compilerOptions" )
@@ -1634,8 +1643,8 @@ def compileProjects(options, lastCheckTime):
 
         # Check for dangerous mistake. Is the output file part of the input?
         if output in input:
-            print "Error: Output file %s same as input! Skipping project." % (
-                output )
+            print("Error: Output file %s same as input! Skipping project." % (
+                output ))
             continue
 
         # Normalize the slashes in the path names.
@@ -1658,7 +1667,7 @@ def compileProjects(options, lastCheckTime):
             for filename in filesToDelete:
                 try:
                     os.unlink( filename )
-                    print "Deleted %s" % filename
+                    print("Deleted %s" % filename)
                 except:
                     pass
 
@@ -1685,14 +1694,14 @@ def compileProjects(options, lastCheckTime):
 
         if len(analysis.errors):
             for error in analysis.errors:
-                print error
+                print(error)
 
         elif output != None:
             if compiler != "cat":
                 RunCompiler( compiler, analysis.getFileList(), output, 
                         compilerOptions, prepend, exports, True, options)
             else:
-                print "Creating %s" % output
+                print("Creating %s" % output)
                 JoinFiles( prepend, analysis.getFileList(), output, True,
                         exports)
 
@@ -1705,7 +1714,7 @@ def main():
     options = Options()
 
     if options.help:
-        print MAN_PAGE;
+        print(MAN_PAGE)
         sys.exit(0)
 
     compiledAt = time.time()
@@ -1724,7 +1733,7 @@ def main():
             # update the watch list because then it wouldn't be complete.
             watchList = newWatchList
         else:
-            print "Some files were missing. Not updating watch list."
+            print("Some files were missing. Not updating watch list.")
 
 # Here is jslint in case they don't have it.
 JSLINT_RHINO = """
