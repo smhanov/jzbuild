@@ -839,7 +839,7 @@ class Analysis:
         self.fileList = [filename] + self.fileList
 
     def addContentToStart( self, contents ):
-        temp = tempfile.NamedTemporaryFile( mode="wb", delete=False )
+        temp = tempfile.NamedTemporaryFile( mode="w", delete=False )
         temp.write(contents)
         self.tempFiles.append( temp.name )
         self.addFileToStart( temp.name )
