@@ -1118,7 +1118,7 @@ def DownloadExterns():
             open(path,"wb").write(urllib2.urlopen(url).read())
 
 def RunCompiler(type, files, output, compilerOptions, prepend, exports,
-        useEnclosure, options):
+        useEnclosure, options, useExterns):
     """Downloads and runs the compiler of the given type.
 
        type is a key to the compiler information in the global map COMPILERS
@@ -1155,7 +1155,7 @@ def RunCompiler(type, files, output, compilerOptions, prepend, exports,
     if "requiredOptions" in compiler:
         cmdLine.extend( compiler["requiredOptions"] )
 
-    if type == "closure":
+    if type == "closure" and useExterns:
         DownloadExterns()
         for extern in EXTERNS.keys():
             cmdLine.extend( ["--externs", os.path.join( GetStorageFolder(),
@@ -1698,8 +1698,10 @@ def compileProjects(options, lastCheckTime):
 
         elif output != None:
             if compiler != "cat":
+                useExterns = GetKey(projects, name, "noexterns", False) != "true"
                 RunCompiler( compiler, analysis.getFileList(), output, 
-                        compilerOptions, prepend, exports, True, options)
+                        compilerOptions, prepend, exports, True, options,
+                        useExterns)
             else:
                 print("Creating %s" % output)
                 JoinFiles( prepend, analysis.getFileList(), output, True,
