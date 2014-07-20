@@ -184,9 +184,9 @@ EXTERNS = {
 }
 
 JCOFFEESCRIPT_URL = \
-    "http://github.com/downloads/smhanov/jcoffeescript/jcoffeescript-1.1.jar"
+    "http://www.hanovsolutions.com/build/jcoffeescript-1.1.jar"
 COFFEESCRIPT_URL = \
-    "http://github.com/downloads/smhanov/coffee-script/coffee-script.js"
+    "https://raw.githubusercontent.com/smhanov/coffee-script/master/extras/coffee-script.js"                   
 def GetStorageFolder():
     """Returns the path to a location where we can store downloads"""
 
@@ -1019,9 +1019,15 @@ def DownloadCoffeeScript():
     global HaveCoffeeScript
     if not HaveCoffeeScript:
         print("Downloading JCoffeescript...")
-        open(JCOFFEESCRIPT_PATH, "wb").write( urllib2.urlopen(JCOFFEESCRIPT_URL).read() )
-        print(COFFEESCRIPT_URL)
-        open(COFFEESCRIPT_PATH, "wb").write( urllib2.urlopen(COFFEESCRIPT_URL).read() )
+        try:
+            open(JCOFFEESCRIPT_PATH, "wb").write( urllib2.urlopen(JCOFFEESCRIPT_URL).read() )
+            print(COFFEESCRIPT_URL)
+            open(COFFEESCRIPT_PATH, "wb").write( urllib2.urlopen(COFFEESCRIPT_URL).read() )
+        except:
+            for name in [JCOFFEESCRIPT_PATH, COFFEESCRIPT_PATH]:
+                if os.path.exists(name):
+                    os.unlink(name)
+            raise
         HaveCoffeeScript = True
 
     if not os.path.exists(COFFEESCRIPT_NODEJS_PATH):
