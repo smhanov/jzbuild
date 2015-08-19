@@ -1336,7 +1336,7 @@ def GetKey( projects, name, key, makeArray=False ):
 
 def InstallRhino(outputPath):
     return DownloadProgram(
-            "ftp://ftp.mozilla.org/pub/mozilla.org/js/rhino1_7R2.zip",
+            "https://ftp.mozilla.org/pub/js/rhino1_7R2.zip",
             "rhino1_7R2/js.jar", outputPath)
 
 def CheckEnvironment(projects, names):
