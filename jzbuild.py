@@ -870,6 +870,8 @@ class Analysis:
             # if it exists, return it.
             if os.path.exists( base + ".coffee" ):
                 return base + ".coffee"
+            elif os.path.exists( base + ".txt" ):
+                return base + ".txt"
             elif os.path.exists( fullname ):
                 return fullname
 
@@ -918,6 +920,33 @@ class Analysis:
     def isMissingFiles(self):
         return self._isMissingFiles
 
+def ConvertTextFiles(analysis, targetTime, options):
+    """Convert files of the form filename.txt into a javascript file,
+       containing a single variable var FILENAME=""
+       followed by the text string.
+    """
+    for f in analysis.getFileList():
+        if not f.lower().endswith(".txt"): continue
+        destination = f + ".js";
+        if not os.path.exists(destination) or \
+           os.path.getmtime(f) > os.path.getmtime(destination):
+            print("Converting %s->%s" % (f, destination))
+            input = open(f, "r")
+            output = open(destination, "wb");
+            varname = os.path.splitext(os.path.basename(f))[0].upper()
+            output.write("var {0} =\n".format(varname).encode("utf8"))
+            first = True
+            for line in input:
+                if first:
+                    output.write("    ".encode("utf-8"))
+                    first = False;
+                else:
+                    output.write(" +\n    ".encode("utf-8"))
+                json.dump(line, output)
+            if first:
+                output.write(""); #empty file
+            output.write(";\n")
+        analysis.replaceFile(f, destination)           
 
 def RunJsLint(files, targetTime, options):
     """Run Jslint on each file in the list that has a modification time greater
@@ -945,7 +974,7 @@ def RunJsLint(files, targetTime, options):
     cmd.append( jslint )
 
     for f in files:
-        if f.endswith(".coffee"): continue
+        if not f.endswith(".js"): continue
         if os.path.getmtime(f) > targetTime:
             cmd.append(f);
             numProcessed += 1
@@ -1670,6 +1699,9 @@ def compileProjects(options, lastCheckTime):
             for coffeeFile in analysis.getInputFilesEndingWith(".coffee"):
                 filesToDelete.append( coffeeFile + ".js" )
 
+            for textFile in analysis.getInputFilesEndingWith(".txt"):
+                filesToDelete.append( textFile + ".js" )
+
             for filename in filesToDelete:
                 try:
                     os.unlink( filename )
@@ -1694,6 +1726,7 @@ def compileProjects(options, lastCheckTime):
         except:
             pass
 
+        ConvertTextFiles(analysis, targetTime, options)
         RunJsLint( analysis.getFileList(), targetTime, options )
         CompileCoffeeScript( analysis, options, compiler, output != None,
                 lastCheckTime)
