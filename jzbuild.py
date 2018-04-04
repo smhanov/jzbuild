@@ -100,6 +100,7 @@ else:
     urllib.urlencode = urllib_parse.urlencode
 import atexit
 import base64
+import fnmatch
 import glob
 import gzip
 import io
@@ -132,10 +133,10 @@ COMPILERS = {
 
         # full path in the zip file of the compiler.
         "filename":
-            "compiler.jar",
+            "closure-compiler*.jar",
 
         # These options are always specified.
-        "requiredOptions": [],    
+        "requiredOptions": ['--process_common_js_modules', '--module_resolution', 'node'],    
 
         # Command line option that must precede each input filename
         "inputOption":
@@ -207,6 +208,8 @@ COFFEESCRIPT_PATH = \
 
 COFFEESCRIPT_NODEJS_PATH = \
     os.path.join(GetStorageFolder(), "coffee-script-node.js" )
+
+TYPESCRIPT_URL = "http://www.hanovsolutions.com/build/tsc.js"
 
 VALID_COMPILERS = list(COMPILERS.keys());
 VALID_COMPILERS.append("cat")
@@ -759,6 +762,8 @@ class Analysis:
         includeRe_coffee = re.compile(r"""#include\s+[<"]([^>"]+)[>"]""")
         exportRe_coffee = re.compile(r"""@export ([A-Za-z_\$][A-Za-z_0-9\.\$]*)""")
 
+        includeRe_ts = re.compile(r""" from '([^']+)'""")
+
         self.vpath = vpath
 
         # contains named temporary files. They will be automatically deleted by
@@ -781,7 +786,6 @@ class Analysis:
             each include found, add it to the file list and update the dependency
             graph with the dependency.
             """
-
             contents = open( path, "r" ).readlines()
             graph.addNode( path )
             filesProcessed[path] = 1;
@@ -800,6 +804,10 @@ class Analysis:
                     self.exports.append( m.group(1) )
 
                 m = includeRe.search( line )
+
+                if not m:
+                    m = includeRe_ts.search( line )
+
                 if not m: continue
 
                 includedPath = self.__findFile( m.group(1) )
@@ -870,6 +878,8 @@ class Analysis:
             # if it exists, return it.
             if os.path.exists( base + ".coffee" ):
                 return base + ".coffee"
+            elif os.path.exists( base + ".ts" ):
+                return base + ".ts"
             elif os.path.exists( base + ".txt" ):
                 return base + ".txt"
             elif os.path.exists( fullname ):
@@ -1000,6 +1010,7 @@ def CompileCoffeeScript( analysis, options, compiler, joined, targetTime ):
     anyCoffee = False
 
     closureMode = compiler == 'closure' or joined
+    typeScriptFiles = []
 
     for filename in analysis.getFileList():
         (path, ext) = os.path.splitext(filename)
@@ -1016,9 +1027,23 @@ def CompileCoffeeScript( analysis, options, compiler, joined, targetTime ):
             else:
                 analysis.errors.append("Error in " + filename + 
                         ": Coffeescript compiler failed")
+        elif ext == '.ts':
+            destination = path + ".js"
+            success = True
+            if not os.path.exists(destination) or \
+               os.path.getmtime(filename) > os.path.getmtime(destination):
+               typeScriptFiles.append((filename, destination))
+            analysis.replaceFile(filename, destination)
 
     if anyCoffee:
         analysis.addContentToStart( COFFEESCRIPT_UTILITIES )
+
+    if typeScriptFiles:
+        cmd = ["tsc"] 
+        for filename, destination in typeScriptFiles:
+            cmd.append(filename)
+        if 0 != subprocess.call(cmd):
+            analysis.errors.append("Typescript failed.")
 
 def DownloadProgram(url, fileInZip, outputPath):
     """Given a url to a zip file, a path to a file within that zip file, and an
@@ -1026,7 +1051,7 @@ def DownloadProgram(url, fileInZip, outputPath):
        
        If the target file already exists it does nothing."""
 
-    if not os.path.exists( outputPath ):
+    if not list(glob.glob(outputPath )):
         print("%s not found! Downloading from %s" % (outputPath, url))
 
         url = urllib2.urlopen( url )
@@ -1038,7 +1063,10 @@ def DownloadProgram(url, fileInZip, outputPath):
             sys.stdout.write("Read %d bytes\r" % len(dataFile))
 
         zip = zipfile.ZipFile( io.BytesIO( dataFile ), "r" )    
-        open(outputPath, "wb").write(zip.read(fileInZip))
+        for info in zip.infolist():
+            print("file={}, basename={}, fileInZip={}".format(info.filename, os.path.basename(info.filename), fileInZip))
+            if fileInZip == info.filename or fnmatch.fnmatch(os.path.basename(info.filename), fileInZip):
+                open(outputPath, "wb").write(zip.read(info.filename))
 
     return True    
 
@@ -1144,6 +1172,7 @@ def RunCoffeeScript( source, destination, closureMode ):
         else:
             return True
 
+
 def DownloadExterns():
     """Downloads Closure compiler externs files, if necessary."""
     for (extern,url) in EXTERNS.items():
@@ -1221,7 +1250,7 @@ def RunCompiler(type, files, output, compilerOptions, prepend, exports,
 
     if type == "closure" and options.cloud: 
         if CallClosureService(cmdLine, outputFile, files):
-            if useEnclosure: outputFile.write("\n})();\n");
+            if useEnclosure: outputFile.write("\n}).call(this);\n");
             return
 
     print(" ".join(cmdLine))
@@ -1238,7 +1267,7 @@ def RunCompiler(type, files, output, compilerOptions, prepend, exports,
     else:    
         subprocess.call(cmdLine, stdout=outputFile)
 
-    if useEnclosure: outputFile.write("\n})();\n");
+    if useEnclosure: outputFile.write("\n}).call(this);\n");
 
 def CallClosureService(cmdline, outputFileHandle, filenames):
 
@@ -1329,7 +1358,7 @@ def JoinFiles( prepended, sources, outputFile, useEnclosure, exports ):
         output.write(open(inputName, "r").read())
     if useEnclosure: 
         output.write(exports)
-        output.write("}());")
+        output.write("\n}).call(this);")
 
 def GetKey( projects, name, key, makeArray=False ):
     """Returns the key of the project, following any bases"""
