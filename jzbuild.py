@@ -128,8 +128,9 @@ COMPILERS = {
     # option.
     "closure": {
         # URL at which to download a zipfile of the compiler
+        # USed to be at: "http://dl.google.com/closure-compiler/compiler-latest.zip"
         "download":
-            "http://dl.google.com/closure-compiler/compiler-latest.zip",
+            "http://www.hanovsolutions.com/build/compiler-20180910.zip",
 
         # full path in the zip file of the compiler.
         "filename":
